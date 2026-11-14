@@ -46,23 +46,17 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
   }
   function togglePause() { if (paused) resume(); else pause(); }
   function clearInput() { Object.keys(input).forEach(k => input[k] = false); }
-  function toggleTrim() {
-    state.assist = !state.assist;
-    document.querySelector('#orbit-trim').classList.toggle('engaged', state.assist);
-  }
   document.querySelector('#pause').onclick = togglePause;
   document.querySelector('#start-flight').onclick = resume;
   document.querySelector('#map-toggle').onclick = () => map = !map;
-  document.querySelector('#orbit-trim').onclick = toggleTrim;
   const keyMap = { KeyW: 'thrust', ArrowUp: 'thrust', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyS: 'brake', ArrowDown: 'brake', Space: 'brake', ShiftLeft: 'boost', ShiftRight: 'boost' };
   document.addEventListener('keydown', e => {
     if (document.querySelector('#modal').open || e.target.matches?.('input,textarea')) return;
-    if (keyMap[e.code] || ['KeyP', 'KeyM', 'KeyF'].includes(e.code)) e.preventDefault();
+    if (keyMap[e.code] || ['KeyP', 'KeyM'].includes(e.code)) e.preventDefault();
     if (keyMap[e.code]) input[keyMap[e.code]] = true;
     if (e.repeat) return;
     if (e.code === 'KeyP') togglePause();
     if (e.code === 'KeyM') map = !map;
-    if (e.code === 'KeyF') toggleTrim();
   }, { signal });
   document.addEventListener('keyup', e => { if (keyMap[e.code]) input[keyMap[e.code]] = false; }, { signal });
   window.addEventListener('blur', pause, { signal });
@@ -172,7 +166,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
         c.strokeStyle = '#47e6e494'; c.lineWidth = 1.5; c.setLineDash([4, 6]); c.beginPath(); c.arc(x, y, band.middle * zoom, 0, TAU); c.stroke(); c.setLineDash([]);
       }
       if (map) { c.fillStyle = name === mission.target ? '#7df8f6' : worldInfo(name).color; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
-      else { const sprite = planetSprite(name); const size = r / (name === 'Saturn' ? 30 : 38); c.drawImage(sprite, x - 64 * size, y - 56 * size, 128 * size, 112 * size); }
+      else { const sprite = planetSprite(name); const size = r / (name === 'Saturn' ? 30 : 38); c.drawImage(sprite, x - 64 * size, y - 64 * size, 128 * size, 128 * size); }
       c.font = `${map ? 9 : 10}px monospace`; c.textAlign = 'center'; c.fillStyle = name === mission.target ? '#79e7ea' : '#728a9c';
       if (!map || NASA_ORRERY_DATA[name].sma > 3) c.fillText(name.toUpperCase(), x, y + r + (map ? 13 : 23));
       if (!map && name !== mission.target) { c.fillStyle = '#536478'; c.font = '8px monospace'; c.fillText(name === 'Earth' ? 'DEPARTURE / NO SCAN' : 'NON-TARGET / NO SCAN', x, y + r + 36); }
@@ -221,20 +215,19 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     document.querySelector('#velocity-readout').textContent = Math.round(Math.hypot(state.vx, state.vy)) + ' u/s';
     document.querySelector('#hull-readout').textContent = Math.round(hp) + '%';
     document.querySelector('#hull-meter').style.width = hp + '%';
-    document.querySelector('#fuel-readout').textContent = fmt(state.fuelKg) + ' kg';
+    document.querySelector('#fuel-readout').textContent = Math.ceil(fuel) + '%';
     document.querySelector('#fuel-meter').style.width = fuel + '%';
     document.querySelector('#target-distance').textContent = (cap.r / GAME_RULES.auScale).toFixed(3) + ' AU';
     document.querySelector('#day-readout').textContent = state.days.toFixed(1);
     const g = gravityAt(state.x, state.y, state.days);
     document.querySelector('#gravity-readout').textContent = 'GRAVITY ' + Math.hypot(g.x, g.y).toFixed(1) + ' u/s²';
-    document.querySelector('#boost-readout').textContent = state.assist && cap.r < cap.band.outer * 1.7 ? 'ORBIT TRIM' : input.brake ? 'RETRO BURN' : input.thrust ? input.boost ? 'CRUISE BOOST' : 'THRUST' : 'COASTING';
+    document.querySelector('#boost-readout').textContent = input.brake ? 'BRAKING' : input.thrust ? input.boost ? 'BOOSTING' : 'THRUST' : 'COASTING';
     const scanPercent = clamp(state.scan / GAME_RULES.scanSeconds * 100, 0, 100);
     document.querySelector('#scan-meter').style.width = scanPercent + '%';
-    document.querySelector('#scan-readout').textContent = 'ORBITAL SCAN ' + Math.floor(scanPercent) + '%';
+    document.querySelector('#scan-readout').textContent = 'SCAN ' + Math.floor(scanPercent) + '%';
     document.querySelector('#scan-hud').classList.toggle('scanning', cap.stable);
-    document.querySelector('#scan-label').textContent = cap.stable ? 'SCANNING ' + mission.target.toUpperCase() + '…' : cap.inBand ? 'MATCH ORBITAL VELOCITY' : cap.r < 800 ? 'ORBITAL APPROACH' : 'INTERCEPT ' + mission.target.toUpperCase();
-    document.querySelector('#scan-guidance').textContent = cap.stable ? 'Hold the band. Keep your orbital motion steady.' : cap.r < cap.band.inner ? 'Too close! Thrust away from the surface.' : cap.inBand ? 'Tap F for orbital trim. Keep moving around the planet.' : cap.r < 800 ? 'Brake to slow down. Enter the cyan band; F helps trim.' : 'Follow the arrow. Rotate, thrust, coast. Brake early.';
-    document.querySelector('#orbit-trim').classList.toggle('engaged', state.assist);
+    document.querySelector('#scan-label').textContent = cap.inBand ? 'SCANNING ' + mission.target.toUpperCase() : mission.target.toUpperCase() + ' ORBIT';
+    document.querySelector('#scan-guidance').textContent = cap.inBand ? 'You’re in orbit. Stay in the cyan band until the scan finishes.' : cap.r < cap.band.inner ? 'Too close! Steer away from the surface and back into the cyan band.' : cap.r < 800 ? 'Brake to slow down, then stay in the cyan orbital band. No extra key needed.' : 'Follow the arrow. Rotate, thrust and coast. Brake before you reach the planet.';
   }
 
   function tick(now) {
@@ -244,7 +237,9 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
       while (dt > 0) {
         const h = Math.min(dt, 1 / 120); dt -= h;
         advanceHazards(h);
+        const hpBefore = state.hp;
         const result = advanceFlight(state, mission, input, h);
+        if (state.hp < hpBefore) flash = 0.5;
         if (result.outcome) { ended = true; clearInput(); onSave(state); onFinish(result.outcome === 'success', result.reason || ''); break; }
       }
       trailTimer += 1 / 60; flash = Math.max(0, flash - 1 / 60);

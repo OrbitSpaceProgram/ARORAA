@@ -1,62 +1,73 @@
 # Orbit Foundry
 
-Open **dist/index.html** in a modern browser. No installation, server, account, or internet connection is required. All graphics are procedural canvas pixel art. The game also supports static hosting.
+Open **dist/index.html** in a modern browser. No setup, installation, account, or internet connection is needed. The hosted website is public and does not require ChatGPT login.
 
 ## Quick judge walkthrough
 
-1. Select **Mercury** for a short inner-system flight and choose **Build your rocket**.
-2. Choose engine, booster count, propellant load, material, satellite, and instruments. **Recommended assembly** selects a viable starting build.
-3. **Buy & launch** deducts the purchase from the single global wallet. Click **Take flight**.
-4. The ship begins outside Earth, facing the target. Hold **W / Up** to thrust. **A/D / Left/Right** rotate; **Space / S** fires retrograde brakes; **Shift + thrust** boosts cruise. Use small burns rather than holding boost through arrival.
-5. Follow the cyan direction arrow. Brake before the target, enter its cyan orbital band, and press **F** for optional orbital trim. Keep moving in the band for six scan seconds and at least 0.4 radians of orbital travel. The target has gravity; touching it fails the mission.
-6. Read the facts unlocked by your instruments. A successful scan deposits a sponsor grant and records an Explorer badge. Failed flights receive no refund.
+1. **Choose Mercury.** Browse the single planet card with arrows, the keyboard, dots, or a swipe. Locked worlds can be previewed, but cannot be launched.
+2. **Build a basic rocket.** Choose an engine, boosters, fuel, and scientific instruments. The initial loadout costs **620 CR** from a **1,000 CR** starting balance. The orbiter chassis is included; there are no satellite-type or rocket-material selectors.
+3. Click **Buy & launch**, then **Take flight**. Rotate with **A/D or Left/Right**, thrust with **W/Up**, brake with **Space/S**, and boost with **Shift + thrust**. Touch buttons are below the window.
+4. Follow the direction arrow and brake near Mercury. **Stay in the cyan orbital band for six scan seconds.** Scanning and gentle stabilization happen automatically: no F key or extra action is needed. Only the chosen destination can complete the mission.
+5. See a simple science report, collect the sponsor grant, and watch credit tokens fly to the global wallet. The first success unlocks **Venus**, additional parts, and more spending money. Continue through the solar system.
 
-**M** toggles a solar-system overview, **P** pauses, and touch buttons provide the same controls. **Expand** enters fullscreen on supported desktop browsers. Flight starts paused; a browser reload resumes the same already-paid mission, also paused.
+**P** pauses. **M** toggles a solar-system overview. Desktop **Expand** enters fullscreen. Instructions remain below the play window. Reloading resumes the already-paid flight, paused, without charging again.
 
-## Campaign credits
+## Progression and credits
 
-There is **one balance**, initially **5,000 game credits**. No planet has its own budget. Selection previews cost nothing; buying the cart charges its full cost once. A win deposits a grant once. A failed or abandoned flight keeps its purchase charge. Retry means buying another rocket.
+There is **one persistent global balance**. Browsing and building previews cost nothing; **Buy & launch** deducts the entire cart exactly once. A successful mission deposits a grant exactly once. Failed or abandoned rockets receive no refund.
 
-The header wallet opens a transaction ledger. Credits, ledger, paid flight state, and mission outcomes share one localStorage record (`orbit-foundry-campaign-v2`). Old version-one mission budgets and badge bonuses are not used. A campaign ends in **Mission failed / Bankruptcy** when an ended flight leaves less than **820 CR**, the cheapest valid new spacecraft. An active paid flight can still finish even when its remaining wallet is low. Only an explicit **Start new campaign** restores starting capital and resets history.
+New campaigns start with Mercury and basic parts. Every successful flight opens one more world in order: **Mercury → Venus → Mars → Jupiter → Saturn → Uranus → Neptune → Pluto**. Replaying an available world also counts as a successful flight. A failure never unlocks a world.
 
-## Data and code map
+| Successful flights | Additional parts |
+| --- | --- |
+| 0 | RL10A-3-3A, one engine, 3,000 kg propellant, imaging camera |
+| 1 | Two-engine cluster, 8,000 kg propellant, thermal radiometer |
+| 2 | Magnetometer |
+| 3 | J-2X engine, 20,000 kg propellant |
+| 4 | Four-engine cluster |
+| 5 | 50,000 kg propellant |
 
-- **`dist/data.js`** starts with the clearly labeled **`NASA_ORRERY_DATA`** constant: all nine exact source rows, including Earth, with source comments. `NASA_FACTS`, `NASA_ENGINES`, `NASA_MATERIALS`, and `GAME_RULES` are kept separate.
-- **`dist/core.js`** contains the Kepler solver, engineering calculations, credit transactions, softened gravity, thrust/inertia integration, and target-only capture rules.
-- **`dist/flight.js`** draws the freely navigable solar system, ship, flight telemetry, direction arrow, radar, orbital bands, and hazards.
-- **`dist/app.js`** implements the builder, persistence, purchases, results, bankruptcy, ledger, and source dialog.
+Prices, rewards, and unlock thresholds are game rules. The starting balance cannot buy all the parts, and later parts are locked until earned. A first Mercury win changes the wallet from **1,000 − 620 + 900 = 1,280 CR**. Recommended loadouts are affordable on a first-try successful tour through all eight destinations.
 
-Each planet solves **M = 2πt/P** and **E − e sin E = M** with ten Newton iterations. Coordinates match the supplied Godot example and rotate by **omega + raan**. The same **1,200 world units/AU** applies everywhere, with **one simulated day per second**. Positions update continuously; Earth separation is the magnitude of the two model position vectors, displayed in AU and converted to km. This replaces the old difference-of-semi-major-axes proxy.
+The header wallet opens the transaction ledger. A campaign ends in **Mission failed / Bankruptcy** when a completed or failed flight leaves less than **620 CR**, the cheapest valid new build. An already-paid active flight can still win with a smaller remaining wallet. Only an explicit **Start new campaign** resets credits, badges, and history.
 
-The orrery source does not provide a common ephemeris epoch. Phase zero is therefore illustrative, not today's planetary positions. Source inclination and tau are retained verbatim, but the requested 2D projection does not apply inclination or infer tau's convention. Planet diameters on screen are exaggerated so the game remains playable; orbital distances retain one linear scale. The radar can fit the local region while **M** shows the entire solar system.
+Progress saves to `orbit-foundry-campaign-v3` in localStorage. Existing version-two purchases, earned credits, completed missions, and paid flights are migrated rather than discarded. An untouched old starting wallet gets the new 1,000 CR starting budget. If browser storage is unavailable, the game works for the current session.
 
-## Verified hardware and units
+## Fuel, hull, and orbiting
 
-- **RL10A-3-3A**: NASA NTRS [19910018888, printed p.176](https://ntrs.nasa.gov/api/citations/19910018888/downloads/19910018888.pdf): 16,500 lbf vacuum thrust, 305 lb mass, 444.4 s specific impulse, oxidizer/fuel ratio 5:1. The code converts lbf to N and lb to kg.
-- **J-2X**: NASA NTRS [20090038671, slide 2](https://ntrs.nasa.gov/api/citations/20090038671/downloads/20090038671.pdf): 1,307 kN, 2,516 kg, minimum 448 s Isp, 5.5 O/F. These are the **2009 development requirements**, not a claim of operational service.
-- Both use **liquid hydrogen / liquid oxygen**. Players choose numeric total propellant loads in **kg**; the builder calculates the separate fuel and oxidizer masses using the chosen engine's mixture ratio. Clustering 1, 2, or 4 engines multiplies thrust, mass, price, and flow.
-- Material densities come from NASA/JPL [D-99657, table F-4, PDF p.145](https://science.nasa.gov/wp-content/uploads/2024/02/rtg-study-d-99657-final-report-june-2017-export-marking-updated1.pdf): aluminum 6061-T6, 2,700; titanium Ti-6Al-4V, 4,430; Inconel 625, 8,440 kg/m³. A common design volume of 0.2 m³ gives hull masses of 540, 886, and 1,688 kg.
+- The builder uses real units: fuel in kg, engine mass in kg, and thrust in kN. Flight displays **fuel as a percentage**. Burns and boost consume fuel at a deliberately accelerated game rate; reaching 0% fails the mission. Coasting saves fuel.
+- Hull starts at **100%**. A target-planet impact removes **25%**, solar heat **40%**, asteroid impacts **30%**, comet impacts **55%**, and belt-rock contacts **24%**. Impacts knock the ship back. A short cooldown stops one contact from counting repeatedly. One hit at full hull cannot end the mission; **0% hull** does.
+- Scan progress accrues while the ship remains in the target's orbital band. There is no key to hold and no hidden angular-travel or minimum-speed gate. Gentle stabilization works automatically for a slow arrival, but cannot catch a fast flyby or overpower steering. Gravity continues to act.
+- Only the selected planet can scan or pay a reward. Other planets exert gravity but have no mission completion or collision penalty.
 
-Wet/dry mass is in **kg**, thrust in **kN**, initial acceleration in **m/s²**, ideal delta-v in **m/s**, Isp in **seconds**, and propellant flow in **kg/s**. The ideal rocket equation is **Δv = Isp g₀ ln(wet/dry)**, as explained by [NASA Glenn](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ideal-rocket-equation/). More mass reduces F/m and the game cruise ceiling; a larger booster cluster improves acceleration but adds mass and burns more propellant.
+Fuel, hull, and scan bars have no surrounding panel backgrounds. Every planet in the target strip has its full name. Controls, instructions, and detailed telemetry are below the play window. Planet bodies use square canvases and undistorted circular sprites; Saturn retains its elliptical ring around a circular body. The destination card has gently moving textures and a floating animation. Reduced-motion settings disable decorative motion and credit-token flight.
 
-These NASA hardware documents supplement the original planetary sources to satisfy the updated real-engine request. All source links and formulas are also available through **NASA data** in the game.
+## Source and code map
 
-## Simulation limits and game rules
+- **`dist/data.js`** begins with **`NASA_ORRERY_DATA`**, the nine exact rows from the supplied [NASA ontology-based orrery](https://nasa.github.io/mission-viz/RMarkdown/ontology_based_orrery_generated_from_R_code.html). Scientific values and hardware references are separate from `GAME_RULES`.
+- **`dist/core.js`** contains the Kepler solver, real-unit engineering calculations, unlock rules, purchases, grants, gravity, fuel, hull collisions, and orbital scanning.
+- **`dist/app.js`** implements the carousel, four-part builder, persistent campaign, migration, results, and credit-token animation. Reward animation changes only the display: the actual grant is applied once before rendering.
+- **`dist/flight.js`** draws free flight, NASA orbits, the chosen-target arrow, radar, orbital band, and outer-system hazards.
+- **`dist/style.css`** and **`dist/flight.css`** style the pixel-art interface. All art is procedural; there are no image or font downloads.
 
-Gravity is inverse-square with softening. Every planet exerts attraction, including non-target bodies. The Sun's world-space gravitational parameter is derived from the model Earth orbit. Local planet gravity starts with the NASA fact-sheet surface values and is scaled for play. Steering, thrust, boost, fuel burn, local gravity, and ship speeds are compressed separately: this is a playable gravity/inertia challenge, not a physical interplanetary transfer simulator. Velocity and gravity HUDs explicitly use **world units/s** and **world units/s²**.
+Each planet solves **M = 2πt/P** and **E − e sin E = M** using ten Newton iterations, then rotates **(a(cos E−e), a√(1−e²)sin E)** by **omega + raan**, matching the supplied Godot example. Every orbit uses **1,200 world units/AU** and **one simulated day per second**. Earth distance is the separation of the two model position vectors, not a difference-of-semi-major-axes proxy. Kilometers use the AU conversion in [NASA fact-sheet notes](https://nssdc.gsfc.nasa.gov/planetary/factsheet/fact_notes.html).
 
-Build checks cover affordability, positive propellant, a science instrument, and rated thrust against Earth-reference weight. That final check uses vacuum engine ratings and is a classroom rule, not sea-level launch certification. Departure begins outside Earth. Fuel is consumed during actual burns; there is no invented engine range in AU. The real rocket-equation delta-v is an assembly comparison, not a claim that this cart reaches any particular world. Real mission planning would additionally require launch windows, staging, arrival delta-v and trajectory calculations; the supplied [NASA Trajectory Browser](https://trajbrowser.arc.nasa.gov/traj_browser.php) remains linked.
+The orrery does not specify a common epoch. Phase zero is illustrative, not today's planetary positions. Inclination and tau remain in the source constant, but the requested 2D projection does not apply them. Planet display sizes are exaggerated for play; orbital positions retain one linear scale. The bodies are circles; the **orbital paths remain eccentric ellipses** from NASA data.
 
-Satellite/instrument masses, hull volume, tank mass fraction, avionics allocation, prices, grants, HP, scan rates and compression are explicit **game design choices**. Higher hull mass receives more game HP as requested; density alone does not determine real material strength. Fact cards unlock existing NASA reference information rather than generating new measurements or invented discoveries.
+## Real engines and scientific facts
 
-**Only the selected destination** can scan, finish a mission, or award a grant. Other planets have gravity but no scan, reward, or planet collision failure. The selected planet and Sun cause collision failure. Scanning requires suitable relative speed, low radial velocity, time in the band, and real angular progress, so stationary hovering cannot finish the mission. Optional **F** trim uses propellant and only acts near the chosen planet's band.
+- **RL10A-3-3A**: [NASA NTRS 19910018888, printed p.176](https://ntrs.nasa.gov/api/citations/19910018888/downloads/19910018888.pdf): 16,500 lbf vacuum thrust, 305 lb mass, 444.4 s Isp, 5:1 oxidizer/fuel. The code converts to N and kg.
+- **J-2X**: [NASA NTRS 20090038671, slide 2](https://ntrs.nasa.gov/api/citations/20090038671/downloads/20090038671.pdf): 1,307 kN, 2,516 kg, minimum 448 s Isp, 5.5 O/F. These are the **2009 development requirements**, not a claim of operational service.
+- Both engines use liquid hydrogen and liquid oxygen. Clusters multiply thrust, mass, price, and consumption. Ideal **Δv = Isp g₀ ln(wet/dry)** and **flow = thrust/(Isp g₀)** follow [NASA Glenn](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ideal-rocket-equation/).
+- Results unlock existing [NASA planetary fact-sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/) values based on the selected instruments. They are reference facts, not newly generated scientific measurements. Descriptions use [Solar System Exploration](https://science.nasa.gov/solar-system/); the [NASA planetary data directory](https://planetary.data.nasa.gov/find-data) links real observations.
 
-The asteroid belt is drawn **between Mars and Jupiter**. Rock positions, schematic 2.1–3.3 AU display bounds, spacing and comets are game hazards, not measured asteroid data. Outer-planet and Pluto missions activate belt/asteroid/comet collisions; inner-system routes do not. No physical asteroid belt is placed around a gas giant.
+The fixed 740 kg chassis and instrument/tank masses are design allocations. Credits, HP, unlocks, fuel scaling, steering, and rewards are explicitly game parameters. Build thrust checks compare vacuum ratings with Earth-reference weight as a classroom rule; departure begins outside Earth. Ideal delta-v is not a prediction of destination feasibility. Actual mission planning needs launch windows, staging, and arrival maneuvers; the supplied [NASA Trajectory Browser](https://trajbrowser.arc.nasa.gov/traj_browser.php) remains linked.
 
-## Maintainer checks (not needed to play)
+Gravity is softened inverse-square attraction from every planet and the Sun. Time, thrust, gravity, and consumption have separate game compression. This is an educational piloting game, not a physical transfer simulator. The asteroid belt is between Mars and Jupiter; its visual bounds, rocks and comets are schematic game hazards, not measured asteroid data. Outer-planet and Pluto missions activate these hazards.
 
-`node tests/core.test.cjs` checks source orbital closure/scale, SI engineering, mass/acceleration trade-offs, one-time purchases and rewards, bankruptcy, fuel, target gating, and achievable capture at all eight destinations.
+## Optional maintainer verification
 
-`node tests/browser.test.cjs` runs optional dependency-free headless Chrome checks: purchases, keyboard flight, pause, reload/resume, instrument results, rewards, bankruptcy/reset, insufficient funds, and mobile layouts. On Windows it uses the installed Chrome path; set `CHROME_PATH` for another installation. Screenshots and the disposable browser profile go in ignored `outputs/`.
+Playing does not require these commands:
 
-All art is procedural pixel art. There are no third-party libraries, font downloads, analytics, accounts, or setup steps. Gameplay works offline, with in-memory persistence if storage is unavailable. Screen transitions respect reduced-motion settings. The hosted site remains public and does not require ChatGPT login.
+- `node tests/core.test.cjs` verifies source orbits, unlocks, part gating, credit accounting, bankruptcy, affordable progression, finite fuel, percentage collision damage, and all eight automatic orbital scans.
+- `node tests/browser.test.cjs` uses installed Chrome, without npm dependencies, to verify migration, the carousel, circular artwork, locked navigation/parts, purchases, fuel/hull percentages, no-key scanning, animated rewards, unlocks, and mobile layouts. Set `CHROME_PATH` if needed. Artifacts go in ignored `outputs/`.

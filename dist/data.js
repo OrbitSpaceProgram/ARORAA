@@ -26,7 +26,6 @@ const SOURCES = {
   trajectory: 'https://trajbrowser.arc.nasa.gov/traj_browser.php',
   rl10: 'https://ntrs.nasa.gov/api/citations/19910018888/downloads/19910018888.pdf',
   j2x: 'https://ntrs.nasa.gov/api/citations/20090038671/downloads/20090038671.pdf',
-  materials: 'https://science.nasa.gov/wp-content/uploads/2024/02/rtg-study-d-99657-final-report-june-2017-export-marking-updated1.pdf',
   equation: 'https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ideal-rocket-equation/'
 };
 
@@ -58,14 +57,6 @@ const NASA_ENGINES = [
   { id: 'j2x', name: 'J-2X', massKg: 2516, thrustN: 1307000, ispSeconds: 448, oxidizerRatio: 5.5, propellant: 'Liquid hydrogen / liquid oxygen', source: SOURCES.j2x, note: '2009 development requirements · vacuum rating' }
 ];
 
-// JPL D-99657, June 2017, Table F-4, printed F-7 / PDF p.145.
-// Densities only. Gameplay collision endurance is NOT a measured material strength.
-const NASA_MATERIALS = [
-  { id: 'aluminum', name: 'Aluminum 6061-T6', density: 2700, color: '#c7d3e7' },
-  { id: 'titanium', name: 'Titanium Ti-6Al-4V', density: 4430, color: '#a4a0c9' },
-  { id: 'inconel', name: 'Inconel 625', density: 8440, color: '#d4b899' }
-];
-
 const WORLDS = [
   { name: 'Mercury', type: 'Rocky planet', color: '#a8a39d', description: 'Map a cratered surface and examine a world of extreme temperatures.', science: ['Surface imaging', 'Thermal observations'] },
   { name: 'Venus', type: 'Rocky planet', color: '#dab66f', description: 'Observe a cloud-covered world with a dense atmosphere.', science: ['Cloud observations', 'Thermal data'] },
@@ -79,20 +70,20 @@ const WORLDS = [
 
 // GAME_RULES: fictional prices, design allocations, HP, and arcade compression.
 // These are never attributed to NASA or presented as real hardware specifications.
-// All bus/instrument/tank masses are YOUR design allocations, expressed in kg.
+// The fixed orbiter chassis, instrument and tank masses are design allocations.
+// A win unlocks the next destination and additional component tiers.
 const GAME_RULES = {
-  initialCredits: 5000, scanSeconds: 6, minimumAngularTravel: 0.4,
-  hullVolumeM3: 0.2, tankMassFraction: 0.04, avionicsKg: 120,
+  initialCredits: 1000, scanSeconds: 6,
+  chassisKg: 740, chassisPrice: 180, hullHP: 100, tankMassFraction: 0.04,
   fuelLoads: [3000, 8000, 20000, 50000], fuelPrices: [180, 360, 750, 1500],
-  enginePrices: [180, 650], materialPrices: [120, 260, 440], hullHP: [80, 135, 220],
-  boosterCounts: [1, 2, 4], integrationPrice: 120,
-  satellites: [{ name: 'Imaging orbiter', massKg: 80, cost: 140, scanRate: 1 }, { name: 'Survey orbiter', massKg: 180, cost: 240, scanRate: 1.15 }, { name: 'Research orbiter', massKg: 420, cost: 360, scanRate: 1.3 }],
+  enginePrices: [180, 650], boosterCounts: [1, 2, 4],
+  unlocks: { engine: [0, 3], boosters: { 1: 0, 2: 1, 4: 4 }, fuel: [0, 1, 3, 5], instruments: [0, 1, 2] },
   instruments: [{ name: 'Imaging camera', massKg: 5, cost: 80, kind: 'camera' }, { name: 'Thermal radiometer', massKg: 10, cost: 110, kind: 'thermal' }, { name: 'Magnetometer', massKg: 4, cost: 100, kind: 'magnetic' }],
   // All heliocentric positions use ONE linear scale. Planet radii are exaggerated.
   // Solar GM in compressed world units, derived from Earth's a and period.
   auScale: 1200, daysPerSecond: 1, gravityScale: 12,
   sunMu: 4 * Math.PI ** 2 * 1200 ** 3 / NASA_ORRERY_DATA.Earth.period ** 2,
-  controlAccelerationScale: 6, fuelBurnTimeScale: 0.08,
+  controlAccelerationScale: 6, fuelBurnTimeScale: 2.5,
   cruiseBoost: 5, maximumCruiseSpeed: 1800,
   // Belt is a schematic distribution between Mars and Jupiter, not asteroid data.
   beltInnerAU: 2.1, beltOuterAU: 3.3,

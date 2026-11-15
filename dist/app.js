@@ -1,22 +1,24 @@
 // NASA_ORRERY_DATA is the first constant in data.js. core.js contains the equations.
-const SAVE_KEY = 'orbit-foundry-campaign-v3';
+const SAVE_KEY = 'osp-campaign-v4';
 const $ = s => document.querySelector(s);
 const fmt = (n, digits = 0) => n.toLocaleString('en-US', { maximumFractionDigits: digits });
 const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 let storageAvailable = true;
 let campaign = loadCampaign();
-let selected = campaign.mission?.target || WORLDS[unlockedWorldCount(campaign) - 1].name;
+let selected = campaign.mission?.target || [...WORLDS].reverse().find(w => destinationUnlocked(campaign, w.name)).name;
 let parts = campaign.mission ? clone(campaign.mission.parts) : defaultParts();
 let step = campaign.mission ? 2 : 0;
 let lastResult = null, flightController = null, transitioning = false;
 let planetAnimation = 0, rewardAnimation = 0, rewardPending = false;
+let labCategory = 'engine', detailPart = null, pinnedPart = null;
+let partHideTimer = 0;
 const coinAnimations = [];
 const sprites = new Map();
 
 function loadCampaign() {
   try {
-    const c = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem('orbit-foundry-campaign-v2') || 'null');
-    if (!c || ![2, 3].includes(c.version) || !Number.isSafeInteger(c.credits) || c.credits < 0
+    const c = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem('orbit-foundry-campaign-v3') || localStorage.getItem('orbit-foundry-campaign-v2') || 'null');
+    if (!c || ![2, 3, 4].includes(c.version) || !Number.isSafeInteger(c.credits) || c.credits < 0
       || !Number.isSafeInteger(c.sequence) || !Number.isFinite(c.days)
       || !Array.isArray(c.records) || !Array.isArray(c.ledger)) return newCampaign();
     // An untouched v2 starting wallet gets the new starting economy. Actual
@@ -27,7 +29,28 @@ function loadCampaign() {
       c.mission.parts = { engine: old.engine, boosters: old.boosters, fuel: old.fuel, instruments: old.instruments };
       if (c.mission.state) c.mission.state.hp = clamp(c.mission.state.hp / [80, 135, 220][old.material || 0] * 100, 0, 100);
     }
-    c.version = 3;
+    if (c.version < 4) {
+      // Preserve earned legacy destinations, credits, receipts, and paid flights.
+      const oldOrder = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
+      c.unlockedWorlds = c.sequence || c.records.length ? [...new Set(['Venus', ...oldOrder.slice(0, Math.min(8, campaignLevel(c) + 1))])] : ['Venus'];
+      if (c.mission?.state) {
+        const s = c.mission.state, ratio = GAME_RULES.auScale / 1200;
+        const oldPosition = orbitalPosition(c.mission.target, s.days, 1200);
+        const oldRadii = { Mercury:19, Venus:25, Earth:27, Mars:22, Jupiter:62, Saturn:54, Uranus:38, Neptune:36, Pluto:18 };
+        const dx = s.x - oldPosition.x, dy = s.y - oldPosition.y;
+        const oldMiddle = Math.max(100, oldRadii[c.mission.target] * 2.6);
+        if (Math.hypot(dx, dy) < oldMiddle * 3) {
+          const now = orbitalPosition(c.mission.target, s.days), local = captureBand(c.mission.target).middle / oldMiddle;
+          const oldVelocity = orbitalVelocity(c.mission.target, s.days);
+          s.x = now.x + dx * local; s.y = now.y + dy * local;
+          s.vx = oldVelocity.x + (s.vx - oldVelocity.x / (ratio * GAME_RULES.daysPerSecond)) * Math.sqrt(local / 10);
+          s.vy = oldVelocity.y + (s.vy - oldVelocity.y / (ratio * GAME_RULES.daysPerSecond)) * Math.sqrt(local / 10);
+        } else { s.x *= ratio; s.y *= ratio; s.vx *= ratio * GAME_RULES.daysPerSecond; s.vy *= ratio * GAME_RULES.daysPerSecond; }
+        s.throttle = 0; s.angularVelocity = 0; s.turnJet = 0; s.hazards = []; s.hazardClock = 0;
+      }
+    }
+    c.version = 4;
+    c.unlockedWorlds = [...new Set(['Venus', ...(c.unlockedWorlds || []).filter(name => WORLDS.some(w => w.name === name))])];
     if (c.mission && (!validParts(c.mission.parts) || !WORLDS.some(w => w.name === c.mission.target))) return newCampaign();
     if (c.mission?.state && !['x', 'y', 'vx', 'vy', 'angle', 'fuelKg', 'hp', 'days', 'scan', 'elapsed'].every(k => Number.isFinite(c.mission.state[k]))) c.mission.state = null;
     c.status = c.mission || c.credits >= minimumMissionCost() ? 'active' : 'bankrupt';
@@ -43,12 +66,9 @@ function updateHeader() {
   $('#mission-number').textContent = String(campaign.sequence + (campaign.mission ? 0 : 1)).padStart(3, '0');
   $('#wallet-value').textContent = fmt(step === 3 && rewardPending && lastResult ? campaign.credits - lastResult.reward : campaign.credits) + ' CR';
   $('#wallet').setAttribute('aria-label', `Global balance ${campaign.credits} credits. Open ledger`);
-  document.querySelectorAll('[data-step]').forEach(b => {
-    b.classList.toggle('active', +b.dataset.step === step);
-    b.setAttribute('aria-current', +b.dataset.step === step ? 'step' : 'false');
-  });
 }
 function render() {
+  clearTimeout(partHideTimer); detailPart = pinnedPart = null;
   cancelAnimationFrame(planetAnimation); cancelAnimationFrame(rewardAnimation);
   coinAnimations.splice(0).forEach(a => a.cancel());
   document.querySelectorAll('.credit-token').forEach(c => c.remove());
@@ -108,7 +128,7 @@ function planetSprite(name) {
   if (!sprites.has(name)) { const c = document.createElement('canvas'); drawPlanet(c, name); sprites.set(name, c); }
   return sprites.get(name);
 }
-function drawRocket(c, x, y, angle, scale, config, burning = false) {
+function drawRocket(c, x, y, angle, scale, config, burning = false, turnJet = 0) {
   c.save(); c.translate(x, y); c.rotate(angle); c.scale(scale, scale);
   c.fillStyle = '#c7d3e7';
   c.fillRect(-12, -5, 23, 10); c.fillRect(11, -3, 6, 6); c.fillRect(17, -1, 4, 2);
@@ -120,6 +140,13 @@ function drawRocket(c, x, y, angle, scale, config, burning = false) {
   if (config.instruments.length > 1) { c.fillStyle = '#7d7bd2'; c.fillRect(-4, -16, 7, 8); c.fillRect(-4, 8, 7, 8); }
   if (config.instruments.includes(2)) { c.fillStyle = '#98f9d9'; c.fillRect(2, -11, 1, 7); }
   if (burning) { c.fillStyle = '#6bd7f6'; c.fillRect(-23, -4, 11, 8); c.fillStyle = '#b8ffff'; c.fillRect(-20, -2, 8, 4); c.fillStyle = '#596eec'; c.fillRect(-29, -2, 6, 4); }
+  // Rocket points along +X. Left is -Y: its forward jet pushes the nose right.
+  if (turnJet) {
+    const side = turnJet > 0 ? -1 : 1, length = 9 + config.boosters * 2;
+    c.fillStyle = '#7198f5'; c.fillRect(4, side < 0 ? -7 - length : 7, 5, length);
+    c.fillStyle = '#adffff'; c.fillRect(5, side < 0 ? -14 : 7, 3, 7);
+    c.fillStyle = '#efffff'; c.fillRect(5, side < 0 ? -10 : 7, 3, 3);
+  }
   c.restore();
 }
 
@@ -127,19 +154,20 @@ function destinations(direction = 0) {
   cancelAnimationFrame(planetAnimation);
   const index = WORLDS.findIndex(w => w.name === selected), w = worldInfo(selected);
   const open = destinationUnlocked(campaign, selected), distance = earthDistance(selected, campaign.days);
-  $('#screen').innerHTML = `<div class="destination-heading"><div><span class="label">CHOOSE YOUR NEXT CHAPTER</span><h1>A whole universe of possibility.</h1></div><span class="progress-label">${unlockedWorldCount(campaign)} / 8 WORLDS UNLOCKED</span></div>
+  const remaining = missionsUntilUnlock(campaign, selected);
+  $('#screen').innerHTML = `<div class="destination-heading"><div><h1>Choose a destination.</h1></div><span class="progress-label">${unlockedWorldCount(campaign)} / 8 WORLDS UNLOCKED</span></div>
   <section class="destination-deck ${open ? '' : 'destination-locked'}" aria-roledescription="carousel" aria-label="Mission destinations" tabindex="0">
   <button class="carousel-arrow previous" id="previous-world" aria-label="Previous planet">←</button>
   <article class="destination-card ${direction > 0 ? 'slide-next' : direction < 0 ? 'slide-prev' : ''}" aria-live="polite">
     <div class="world-stage"><span class="world-coordinate">SOL SYSTEM / 0${index + 1}</span><div class="world-orbit orbit-one"></div><div class="world-orbit orbit-two"></div><div class="planet-float"><canvas id="destination-planet" aria-label="Animated circular pixel-art ${selected}"></canvas></div><span class="world-classification">${w.type.toUpperCase()}</span></div>
     <div class="destination-copy"><span class="destination-status ${open ? 'pass' : ''}">${open ? '● MISSION AVAILABLE' : '◇ DESTINATION LOCKED'}</span><h2>${selected}<span>0${index + 1}</span></h2><p>${w.description}</p><div class="card-science">${w.science.map(s => `<span>${s}</span>`).join('')}</div><div class="destination-stats"><div><small>FROM EARTH · MODEL</small><strong>${fmt(distance, 3)} <em>AU</em></strong><span>${fmt(distance * UNITS.kmPerAU / 1e6, 1)} million km</span></div><div><small>MISSION REWARD</small><strong>+${fmt(missionReward(selected, defaultParts()))} <em>CR</em></strong><span>Added to your global credits</span></div></div>
-    <button class="primary" id="build" ${open ? '' : 'disabled'}>${open ? 'Build your rocket' : 'Win ' + index + ' mission' + (index === 1 ? '' : 's') + ' to unlock'} <span>${open ? '↗' : '◇'}</span></button><p class="progress-hint">${open ? 'Every successful mission unlocks a new world.' : 'Complete an available expedition to move forward.'}</p></div>
+    <button class="primary" id="build" ${open ? '' : 'disabled'}>${open ? 'Build your rocket' : remaining + ' more successful mission' + (remaining === 1 ? '' : 's') + ' to unlock'} <span>${open ? '↗' : '◇'}</span></button></div>
   </article><button class="carousel-arrow next" id="next-world" aria-label="Next planet">→</button></section>
   <div class="carousel-footer"><span>0${index + 1} <b>/ 08</b></span><div class="carousel-dots" aria-label="Planet navigation">${WORLDS.map((p, i) => `<button data-planet="${p.name}" class="${p.name === selected ? 'selected' : ''} ${destinationUnlocked(campaign, p.name) ? 'unlocked' : 'locked'}" aria-label="${p.name}${destinationUnlocked(campaign, p.name) ? '' : ', locked'}" aria-pressed="${p.name === selected}" title="${p.name}"><span></span></button>`).join('')}</div><button class="text-button notes">NASA data ↗</button></div>`;
   const canvas = $('#destination-planet'); drawPlanet(canvas, selected);
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     let last = 0;
-    const animate = time => { if (step !== 0 || !canvas.isConnected) return; if (time - last > 70) { drawPlanet(canvas, selected, time * 0.004); last = time; } planetAnimation = requestAnimationFrame(animate); };
+    const animate = time => { if (step !== 0 || !canvas.isConnected || matchMedia('(prefers-reduced-motion: reduce)').matches) return; if (time - last > 70) { drawPlanet(canvas, selected, time * 0.004); last = time; } planetAnimation = requestAnimationFrame(animate); };
     planetAnimation = requestAnimationFrame(animate);
   }
   function move(offset) { selected = WORLDS[(index + offset + WORLDS.length) % WORLDS.length].name; destinations(offset); }
@@ -149,36 +177,117 @@ function destinations(direction = 0) {
   $('.world-stage').onpointerdown = e => touchX = e.clientX;
   $('.world-stage').onpointerup = e => { if (touchX !== null && Math.abs(e.clientX - touchX) > 45) move(e.clientX < touchX ? 1 : -1); touchX = null; };
   document.querySelectorAll('[data-planet]').forEach(b => b.onclick = () => { const previous = index; selected = b.dataset.planet; destinations(WORLDS.findIndex(w => w.name === selected) > previous ? 1 : -1); });
-  $('#build').onclick = () => { if (open) { parts = recommendedParts(campaign, selected); go(1); } };
+  $('#build').onclick = () => { if (open) { parts = recommendedParts(campaign, selected); labCategory = 'engine'; pinnedPart = detailPart = null; go(1); } };
   $('.notes').onclick = notes;
 }
 
-function partButton(key, index, title, detail, price) {
+function partButton(key, index, title, price) {
   const chosen = key === 'instruments' ? parts.instruments.includes(index) : parts[key] === index;
-  const required = partUnlockLevel(key, index), locked = required > campaignLevel(campaign);
-  return `<button class="part ${chosen ? 'selected' : ''} ${locked ? 'part-locked' : ''}" data-part="${key}" data-index="${index}" aria-pressed="${chosen}" ${locked ? 'disabled' : ''}><span>${title}<small>${locked ? '◇ Unlock after ' + required + ' successful mission' + (required === 1 ? '' : 's') : detail}</small></span><span>${fmt(price)} CR${chosen && !locked ? ' ✓' : ''}</span></button>`;
+  const locked = partUnlockLevel(key, index) > campaignLevel(campaign);
+  return `<div class="part-row"><button class="part ${chosen ? 'selected' : ''} ${locked ? 'part-locked' : ''}" data-part="${key}" data-index="${index}" aria-pressed="${chosen}" aria-disabled="${locked}" aria-describedby="part-popover"><span>${title}</span><span>${fmt(price)} CR</span></button><button class="part-info-button" data-info="${index}" aria-label="Information about ${title}" aria-expanded="false">i</button></div>`;
+}
+
+function partInformation(key, index) {
+  const e = NASA_ENGINES[parts.engine], remaining = Math.max(0, partUnlockLevel(key, index) - campaignLevel(campaign));
+  let title, copy, facts, source, note;
+  if (key === 'engine') {
+    const engine = NASA_ENGINES[index]; title = engine.name;
+    copy = `${engine.note}. Burns liquid hydrogen with liquid oxygen.`;
+    facts = [['Vacuum thrust', fmt(engine.thrustN / 1000, 1) + ' kN'], ['Engine mass', fmt(engine.massKg, 1) + ' kg'], ['Specific impulse', engine.ispSeconds + ' s'], ['Oxidizer / fuel', engine.oxidizerRatio + ':1']];
+    source = engine.source; note = 'NASA hardware values. The price is game credits; the J-2X values are development requirements.';
+  } else if (key === 'boosters') {
+    const configuration = { ...parts, boosters: index }, s = engineering(configuration), steering = steeringStats(configuration);
+    title = index === 1 ? 'Single engine' : `${index}-engine cluster`;
+    copy = `${index} × ${e.name}. More engines add thrust and mass. Stronger attitude jets turn faster; the opposite side fires to turn the nose.`;
+    facts = [['Total vacuum thrust', fmt(s.thrustN / 1000, 1) + ' kN'], ['Engine mass', fmt(e.massKg * index, 1) + ' kg'], ['Physical mass flow', fmt(s.massFlow, 1) + ' kg/s'], ['Game turn rate', fmt(steering.rate * 180 / Math.PI) + '°/s']];
+    source = e.source; note = 'Thrust, mass and flow are derived from NASA engine values. Cluster arrangements and attitude control are game designs. The listed cluster price includes the selected engine(s), charged once.';
+  } else if (key === 'fuel') {
+    const s = engineering({ ...parts, fuel: index }); title = `${fmt(s.propellantKg)} kg propellant`;
+    copy = `Liquid hydrogen (fuel) and liquid oxygen (oxidizer), using the ${e.name} mixture ratio. More propellant increases ideal delta-v, but the added mass slows acceleration.`;
+    facts = [['Liquid hydrogen', fmt(s.hydrogenKg, 1) + ' kg'], ['Liquid oxygen', fmt(s.oxygenKg, 1) + ' kg'], ['Mixture ratio', e.oxidizerRatio + ':1 O/F'], ['Loaded ideal Δv', fmt(s.deltaV) + ' m/s']];
+    source = e.source; note = 'Propellant chemistry and mixture ratio: NASA engine reference. Tank capacities, 4% tank-mass allocation, prices and accelerated flight consumption are game rules.';
+  } else {
+    const instrument = GAME_RULES.instruments[index]; title = instrument.name;
+    const descriptions = [
+      'Records light to image terrain and atmospheric clouds. Your mission unlocks surface or cloud observations and the planet’s reference diameter.',
+      'Measures thermal radiation to study temperature patterns. Your mission unlocks thermal observations and the NASA reference mean temperature.',
+      'Measures magnetic fields around a spacecraft. Your mission unlocks the planet’s reference global magnetic-field classification.'
+    ];
+    copy = descriptions[index];
+    facts = [['Payload allocation', instrument.massKg + ' kg'], ['Science field', ['Imaging', 'Thermal radiation', 'Magnetism'][index]], ['Extra-instrument grant', '+30% of base reward']];
+    source = SOURCES.data; note = 'NASA’s planetary data directory and fact sheet supply the science context and unlocked facts. These are generic instrument classes; payload masses and grant bonuses are game allocations.';
+  }
+  return `<button id="close-part-info" class="close-part-info" aria-label="Close part information">×</button><span class="label">${remaining ? remaining + ' MORE WIN' + (remaining === 1 ? '' : 'S') + ' TO UNLOCK' : 'PART INFORMATION'}</span><h3>${title}</h3><p>${copy}</p><dl>${facts.map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl><a href="${source}" target="_blank" rel="noopener">NASA reference ↗</a><small>${note}</small>`;
+}
+
+function hidePartInfo() {
+  const popover = $('#part-popover'); if (popover) popover.hidden = true;
+  detailPart = pinnedPart = null;
+  document.querySelectorAll('[data-info]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+function showPartInfo(key, index, anchor, pin = false) {
+  clearTimeout(partHideTimer);
+  const popover = $('#part-popover'); if (!popover) return;
+  detailPart = { key, index, anchor }; if (pin) pinnedPart = index;
+  popover.innerHTML = partInformation(key, index); popover.hidden = false;
+  document.querySelectorAll('[data-info]').forEach(b => b.setAttribute('aria-expanded', String(+b.dataset.info === index)));
+  $('#close-part-info').onclick = () => { anchor.focus({ preventScroll: true }); hidePartInfo(); };
+  positionPartInfo();
+}
+function positionPartInfo() {
+  const popover = $('#part-popover'); if (!popover || popover.hidden || !detailPart?.anchor.isConnected) return;
+  const r = detailPart.anchor.getBoundingClientRect(), mobile = innerWidth < 760;
+  const width = mobile ? Math.min(290, innerWidth - 28) : Math.min(290, Math.max(190, r.left - 28));
+  popover.style.width = width + 'px'; popover.style.maxHeight = Math.max(220, innerHeight - 36) + 'px';
+  const left = mobile ? (innerWidth - width) / 2 : Math.max(14, r.left - width - 14);
+  const top = mobile ? Math.max(18, (innerHeight - popover.offsetHeight) / 2) : clamp(r.top, 16, Math.max(16, innerHeight - popover.offsetHeight - 16));
+  popover.style.left = left + 'px'; popover.style.top = top + 'px';
 }
 
 function lab() {
+  detailPart = pinnedPart = null;
   const s = engineering(parts), e = NASA_ENGINES[parts.engine], checks = launchChecks(parts, campaign.credits, campaignLevel(campaign));
-  $('#screen').innerHTML = `<div class="section-heading"><div><span class="label">ROCKET LAB / ${selected.toUpperCase()}</span><h2>A small build. A big mission.</h2><p>Choose your loadout. Win missions to unlock more.</p></div><span class="tag">${campaignLevel(campaign)} SUCCESSFUL MISSIONS</span></div><div class="lab-layout simplified-lab"><div class="parts-grid">
-  <section class="panel"><h3><span>01</span> Engine</h3>${NASA_ENGINES.map((p, i) => partButton('engine', i, p.name, `${fmt(p.thrustN / 1000, 1)} kN · ${fmt(p.massKg, 1)} kg`, GAME_RULES.enginePrices[i])).join('')}<small class="part-note">NASA engine specifications · vacuum ratings</small></section>
-  <section class="panel"><h3><span>02</span> Boosters</h3>${GAME_RULES.boosterCounts.map(n => partButton('boosters', n, n === 1 ? 'Single engine' : `${n}-engine cluster`, `${fmt(e.thrustN * n / 1000, 1)} kN total thrust`, GAME_RULES.enginePrices[parts.engine] * n)).join('')}<small class="part-note">Engine price × count · charged once</small></section>
-  <section class="panel"><h3><span>03</span> Fuel</h3>${GAME_RULES.fuelLoads.map((kg, i) => partButton('fuel', i, `${fmt(kg)} kg`, 'Liquid hydrogen + liquid oxygen', GAME_RULES.fuelPrices[i])).join('')}<small class="part-note">More fuel lasts longer, but adds mass.</small></section>
-  <section class="panel"><h3><span>04</span> Scientific instruments</h3>${GAME_RULES.instruments.map((p, i) => partButton('instruments', i, p.name, `${p.massKg} kg · unlocks a science finding`, p.cost)).join('')}<small class="part-note">Take at least one instrument.</small></section>
-  </div><aside class="panel assembly-summary"><span class="label">YOUR ${selected.toUpperCase()} ORBITER</span><div class="rocket-stage"><canvas id="rocket-preview" aria-label="Your custom rocket"></canvas></div><div class="cart-total"><span>Launch cost</span><strong>${fmt(s.cost)} <small>CR</small></strong></div><div class="wallet-after">${fmt(campaign.credits)} CR available <b class="${s.cost > campaign.credits ? 'fail' : 'pass'}">${fmt(campaign.credits - s.cost)} CR after launch</b></div><div class="check"><span>Orbiter chassis included</span><span>${GAME_RULES.chassisPrice} CR</span></div><div class="check"><span>Launch checks</span><span class="${checks.every(c => c.ok) ? 'pass' : 'fail'}">${checks.every(c => c.ok) ? '✓ Ready' : 'Needs revision'}</span></div><button class="primary" id="launch">Buy & launch <span>↗</span></button><p class="help">A win earns <strong>+${fmt(missionReward(selected, parts))} CR</strong> and unlocks the next world.</p><details class="engineering-details"><summary>Engineering & NASA data</summary><div class="engineering-stats"><div><small>WET MASS</small><strong>${fmt(s.wetKg)} kg</strong></div><div><small>THRUST</small><strong>${fmt(s.thrustN / 1000, 1)} kN</strong></div><div><small>IDEAL ΔV</small><strong>${fmt(s.deltaV)} m/s</strong></div><div><small>ISP</small><strong>${e.ispSeconds} s</strong></div></div><a href="${e.source}" target="_blank" rel="noopener">NASA engine reference ↗</a><p class="help">Credits, chassis mass, and game difficulty are design choices. ΔV is an ideal comparison, not a real mission prediction.</p></details></aside></div><div class="lab-bottom"><button class="secondary" id="back">← Destination</button><button class="text-button" id="demo">Recommended loadout ↗</button></div>`;
+  const categories = [['engine', '01', 'Engines'], ['boosters', '02', 'Boosters'], ['fuel', '03', 'Fuel tanks'], ['instruments', '04', 'Instruments']];
+  const options = labCategory === 'engine' ? NASA_ENGINES.map((p, i) => partButton('engine', i, p.name, GAME_RULES.enginePrices[i])).join('')
+    : labCategory === 'boosters' ? GAME_RULES.boosterCounts.map(n => partButton('boosters', n, n === 1 ? 'Single engine' : `${n}-engine cluster`, GAME_RULES.enginePrices[parts.engine] * n)).join('')
+    : labCategory === 'fuel' ? GAME_RULES.fuelLoads.map((kg, i) => partButton('fuel', i, `${fmt(kg)} kg · LH₂ / LOX`, GAME_RULES.fuelPrices[i])).join('')
+    : GAME_RULES.instruments.map((p, i) => partButton('instruments', i, p.name, p.cost)).join('');
+  const names = { engine: e.name, boosters: parts.boosters + ' engine' + (parts.boosters === 1 ? '' : 's'), fuel: fmt(s.propellantKg) + ' kg', instruments: parts.instruments.length + ' selected' };
+  $('#screen').innerHTML = `<div class="section-heading"><div><span class="label">${selected.toUpperCase()} EXPEDITION</span><h2>Rocket lab</h2></div><span class="tag">${campaignLevel(campaign)} SUCCESSFUL MISSIONS</span></div>
+  <div class="lab-layout category-lab"><aside class="part-categories" aria-label="Rocket part categories" role="tablist" aria-orientation="vertical">${categories.map(([key,num,label]) => `<button id="category-${key}" role="tab" aria-selected="${labCategory === key}" aria-controls="part-options" tabindex="${labCategory === key ? 0 : -1}" data-category="${key}" class="${labCategory === key ? 'active' : ''}"><span>${num}</span><strong>${label}</strong><small>${names[key]}</small></button>`).join('')}</aside>
+  <section class="panel part-selection" id="part-options" role="tabpanel" aria-labelledby="category-${labCategory}"><div class="part-selection-heading"><h3>${categories.find(c => c[0] === labCategory)[2]}</h3><span>${labCategory === 'instruments' ? 'SELECT ONE OR MORE' : 'SELECT ONE'}</span></div><div class="part-options">${options}</div><p class="part-note">Hover or focus a part for specifications. Tap <b>i</b> for details.</p>${labCategory === 'instruments' ? '<p class="science-bonus-note">Each additional instrument earns +30% of the mission’s base grant.</p>' : ''}</section>
+  <aside class="panel assembly-summary"><span class="label">YOUR ${selected.toUpperCase()} ORBITER</span><div class="rocket-stage"><canvas id="rocket-preview" aria-label="Your custom rocket"></canvas></div><div class="cart-total"><span>Launch cost</span><strong>${fmt(s.cost)} <small>CR</small></strong></div><div class="wallet-after">${fmt(campaign.credits)} CR available <b class="${s.cost > campaign.credits ? 'fail' : 'pass'}">${fmt(campaign.credits - s.cost)} CR after launch</b></div><div class="check"><span>Orbiter chassis included</span><span>${GAME_RULES.chassisPrice} CR</span></div><div class="check"><span>Launch checks</span><span class="${checks.every(c => c.ok) ? 'pass' : 'fail'}">${checks.every(c => c.ok) ? '✓ Ready' : 'Needs revision'}</span></div><button class="primary" id="launch">Buy & launch <span>↗</span></button><p class="help">Successful mission: <strong>+${fmt(missionReward(selected, parts))} CR</strong></p><details class="engineering-details"><summary>Engineering & NASA data</summary><div class="engineering-stats"><div><small>WET MASS</small><strong>${fmt(s.wetKg)} kg</strong></div><div><small>THRUST</small><strong>${fmt(s.thrustN / 1000, 1)} kN</strong></div><div><small>IDEAL ΔV</small><strong>${fmt(s.deltaV)} m/s</strong></div><div><small>ISP</small><strong>${e.ispSeconds} s</strong></div></div><a href="${e.source}" target="_blank" rel="noopener">NASA engine reference ↗</a><p class="help">Credits and payload allocations are game rules. Ideal Δv is not a real mission prediction. Plan burns carefully and reserve fuel for braking.</p></details></aside></div>
+  <aside id="part-popover" class="part-popover" role="dialog" aria-label="Part specifications" hidden></aside><div class="lab-bottom"><button class="secondary" id="back">← Destination</button><button class="text-button" id="demo">Recommended loadout ↗</button></div>`;
   const canvas = $('#rocket-preview'); canvas.width = 128; canvas.height = 128;
   drawRocket(canvas.getContext('2d'), 64, 64, -Math.PI / 2, 2.1, parts, true);
-  document.querySelectorAll('[data-part]').forEach(b => b.onclick = () => {
-    if (b.disabled) return;
-    const key = b.dataset.part, i = +b.dataset.index;
-    if (key === 'instruments') parts.instruments = parts.instruments.includes(i) ? parts.instruments.filter(v => v !== i) : [...parts.instruments, i];
-    else parts[key] = i;
-    lab();
+  document.querySelectorAll('[data-category]').forEach(b => {
+    b.onclick = () => { labCategory = b.dataset.category; lab(); $('#category-' + labCategory).focus({ preventScroll: true }); };
+    b.onkeydown = event => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault(); const index = categories.findIndex(c => c[0] === labCategory);
+      labCategory = categories[event.key === 'Home' ? 0 : event.key === 'End' ? 3 : (index + (event.key === 'ArrowDown' ? 1 : 3)) % 4][0];
+      lab(); $('#category-' + labCategory).focus({ preventScroll: true });
+    };
   });
+  document.querySelectorAll('[data-part]').forEach(b => {
+    const key = b.dataset.part, i = +b.dataset.index, row = b.closest('.part-row');
+    row.onpointerenter = event => { if (event.pointerType !== 'touch' && pinnedPart === null) showPartInfo(key, i, b); };
+    row.onpointerleave = event => { if (pinnedPart === null && !$('#part-popover').contains(event.relatedTarget) && !row.contains(document.activeElement)) partHideTimer = setTimeout(hidePartInfo, 180); };
+    b.onfocus = () => showPartInfo(key, i, b);
+    b.onclick = () => {
+      if (b.getAttribute('aria-disabled') === 'true') return showPartInfo(key, i, b, true);
+      if (key === 'instruments') parts.instruments = parts.instruments.includes(i) ? parts.instruments.filter(v => v !== i) : [...parts.instruments, i];
+      else parts[key] = i;
+      lab(); const chosen = document.querySelector(`[data-part="${key}"][data-index="${i}"]`); chosen.focus({ preventScroll: true });
+    };
+    row.querySelector('[data-info]').onclick = () => pinnedPart === i ? hidePartInfo() : showPartInfo(key, i, b, true);
+  });
+  $('#part-popover').onpointerleave = () => { if (pinnedPart === null && !$('#part-popover').contains(document.activeElement)) hidePartInfo(); };
+  $('#part-popover').onpointerenter = () => clearTimeout(partHideTimer);
   $('#back').onclick = () => go(0); $('#launch').onclick = purchaseAndLaunch;
   $('#demo').onclick = () => { parts = recommendedParts(campaign, selected); lab(); };
 }
+
 
 function purchaseAndLaunch() {
   if (campaign.mission || transitioning) return;
@@ -238,11 +347,10 @@ function results() {
   if (!lastResult) { step = 0; return destinations(); }
   const r = lastResult, unlocked = r.unlockedPlanet;
   $('#screen').innerHTML = `<section class="mission-result ${r.success ? 'mission-won' : 'mission-lost'}"><div class="result-emblem">${r.success ? '<canvas id="result-planet" aria-label="' + r.planet + '"></canvas><span>✓</span>' : '<div class="failure-sigil">!</div>'}</div><span class="label">${r.success ? 'SCIENCE RECEIVED · MISSION COMPLETE' : 'EXPEDITION ENDED'}</span><h1>${r.success ? 'A little farther. A little wiser.' : 'Mission failed.'}</h1><p class="result-subtitle">${r.success ? 'Your ' + r.planet + ' expedition brought back new knowledge.' : escapeHTML(r.reason)}</p>
-    ${r.success ? `<div class="reward-award"><span>SPONSOR GRANT</span><strong id="reward-amount">+${fmt(r.reward)} <small>CR</small></strong></div><div class="discoveries">${discoveryCards(r.planet, r.parts)}</div><div class="unlock-reveal">${unlocked ? '<span>✧ ' + unlocked + ' unlocked</span>' : '<span>✧ All worlds unlocked</span>'}${campaignLevel(campaign) <= 5 ? '<span>New parts in the rocket lab</span>' : ''}</div>` : `<p class="loss-balance">${fmt(campaign.credits)} CR remaining · Rocket cost ${fmt(r.cost)} CR</p>`}
-    <div class="result-actions"><button class="primary" id="next-mission">${r.success ? unlocked ? 'Explore ' + unlocked : 'Choose your next mission' : 'Build another rocket'} <span>↗</span></button><button class="text-button" id="view-ledger">View credits</button></div>${r.success ? '<small class="result-reference">NASA reference facts unlocked by your instruments. <a href="' + SOURCES.facts + '" target="_blank" rel="noopener">View source ↗</a></small>' : '<small class="result-reference">Your next attempt uses the same global credit balance.</small>'}</section>`;
+    ${r.success ? `<div class="reward-award"><span>SPONSOR GRANT</span><strong id="reward-amount">+${fmt(r.reward)} <small>CR</small></strong></div><p class="reward-breakdown">${fmt(missionReward(r.planet, { ...r.parts, instruments: [0] }))} CR base${r.parts.instruments.length > 1 ? " + " + fmt(r.reward - missionReward(r.planet, { ...r.parts, instruments: [0] })) + " CR science bonus" : " · 1 instrument"}</p><div class="discoveries">${discoveryCards(r.planet, r.parts)}</div><div class="unlock-reveal">${unlocked ? '<span>✧ ' + unlocked + ' unlocked</span>' : '<span>✧ All worlds unlocked</span>'}${campaignLevel(campaign) <= 5 ? '<span>New parts in the rocket lab</span>' : ''}</div>` : `<p class="loss-balance">${fmt(campaign.credits)} CR remaining · Rocket cost ${fmt(r.cost)} CR</p>`}
+    <div class="result-actions"><button class="primary" id="next-mission">${r.success ? unlocked ? 'Explore ' + unlocked : 'Choose your next mission' : 'Build another rocket'} <span>↗</span></button></div>${r.success ? '<small class="result-reference">NASA reference facts unlocked by your instruments. <a href="' + SOURCES.facts + '" target="_blank" rel="noopener">View source ↗</a></small>' : '<small class="result-reference">Your next attempt uses the same global credit balance.</small>'}</section>`;
   if (r.success) drawPlanet($('#result-planet'), r.planet);
   $('#next-mission').onclick = () => { rewardPending = false; if (r.success && unlocked) selected = unlocked; go(r.success ? 0 : 1); };
-  $('#view-ledger').onclick = ledger;
   if (r.success && rewardPending) animateCreditReward(r.reward);
 }
 
@@ -291,17 +399,17 @@ function ledger() {
 function confirmReset() {
   modal('<div class="label">NEW CAMPAIGN</div><h2>Start again?</h2><p>This resets the saved balance, badges, and history. Any active rocket is discarded.</p><div class="actions"><button class="primary" id="confirm-reset">Start new campaign ↗</button><button class="secondary" id="cancel-reset">Keep campaign</button></div>');
   $('#cancel-reset').onclick = closeModal;
-  $('#confirm-reset').onclick = () => { flightController?.destroy(); flightController = null; campaign = newCampaign(); parts = defaultParts(); selected = 'Mercury'; lastResult = null; rewardPending = false; saveCampaign(); closeModal(); go(0); };
+  $('#confirm-reset').onclick = () => { flightController?.destroy(); flightController = null; campaign = newCampaign(); parts = defaultParts(); selected = 'Venus'; lastResult = null; rewardPending = false; saveCampaign(); closeModal(); go(0); };
 }
 function archive() {
   modal(`<div class="label">EXPLORATION LOG</div><h2>Flight archive</h2>${campaign.records.length ? `<p>${campaign.records.filter(r => r.success).length} successful missions. Credits are tracked independently of badges.</p><div class="table-scroll"><table><tr><th>World</th><th>Outcome</th><th>Net credits</th></tr>${[...campaign.records].reverse().map(r => `<tr><td>${escapeHTML(r.planet)}</td><td>${r.success ? '✧ Explorer' : 'Mission failed'}</td><td class="${r.reward - r.cost >= 0 ? 'pass' : 'fail'}">${fmt(r.reward - r.cost)} CR</td></tr>`).join('')}</table></div>` : '<p class="empty">No flights logged yet.<br>Build a rocket to start your first expedition.</p>'}`);
 }
 function notes() {
   modal(`<div class="label">OPEN SCIENCE</div><h2>NASA data. Clear game rules.</h2><p><strong>data.js</strong> begins with the verbatim <strong>NASA_ORRERY_DATA</strong> constant. All game prices, unlocks, collision damage and fuel scaling are separate in <strong>GAME_RULES</strong>.</p>
-  <h3>Solar system</h3><p><a href="${SOURCES.orrery}" target="_blank" rel="noopener">NASA orrery</a> provides a, e, period and orientation. The solver uses M=2πt/P and ten Newton iterations for E−e sin E=M, then rotates (a(cos E−e), a√(1−e²)sin E) by omega+raan, matching your Godot example. All orbits share 1,200 world units/AU and one day per second. The source has no common epoch: phase zero is illustrative, not today's positions. The 2D projection retains but does not apply inclination/tau.</p><p>Planet bodies are circular pixel sprites; their display sizes are exaggerated. Earth distances are model vector separations. The <a href="${SOURCES.units}" target="_blank" rel="noopener">NASA AU conversion</a> supplies kilometers. Gravity acts from every planet and the Sun, with game softening and local scale factors.</p>
-  <h3>Engine specifications</h3><p><a href="${SOURCES.rl10}" target="_blank" rel="noopener">RL10A-3-3A · NTRS p.176</a>: 16,500 lbf vacuum thrust, 305 lb, 444.4 s Isp, 5:1 O/F, converted to N and kg. <a href="${SOURCES.j2x}" target="_blank" rel="noopener">J-2X · NTRS slide 2</a>: 1,307 kN, 2,516 kg, minimum 448 s Isp, 5.5 O/F, from 2009 development requirements. Both use LH₂/LOX. J-2X is not presented as operationally flown.</p><p>The builder keeps kg and kN. Ideal Δv = Isp g₀ ln(wet/dry) and flow = thrust/(Isp g₀), following the <a href="${SOURCES.equation}" target="_blank" rel="noopener">NASA rocket equation</a>. A fixed 740 kg orbiter chassis is a design allocation, not measured NASA hardware. The Earth-reference thrust check uses vacuum ratings as a classroom comparison. Flight begins outside Earth.</p>
-  <h3>Progression & credits</h3><p>New campaigns start at ${GAME_RULES.initialCredits} game credits, with Mercury and basic parts unlocked. Every win opens the next world. Two-engine boosters, 8,000 kg fuel and thermal imaging unlock after one win; the magnetometer after two; J-2X and 20,000 kg fuel after three; four-engine boosters after four; 50,000 kg fuel after five. Prices and grants are fictional credits, not real mission costs.</p><p>Shopping is free until Buy & launch. Purchases charge once. Wins pay once; failures have no refund. Bankruptcy occurs after a flight if fewer than ${minimumMissionCost()} CR remain for the cheapest build. Only an explicit restart restores the starting balance. Existing saved credits and completed missions are preserved when upgrading to this version.</p>
-  <h3>Flight</h3><p>Fuel is shown as remaining percent, with faster game consumption so boost is a meaningful trade-off. Empty fuel fails the mission. Scanning starts automatically in the chosen planet's cyan band; stay there for ${GAME_RULES.scanSeconds} scan seconds. No F key, hidden speed requirement or extra action is needed. Gentle stabilization helps once inside.</p><p>Hull starts at 100%. Target impacts remove 25%, solar heat 40%, asteroids 30%, comets 55%, and belt rocks 24%. A short cooldown prevents one contact from counting as many impacts. The ship is knocked back. Only zero hull ends the flight.</p><p>Other planets exert gravity but do not scan or award a mission. The <a href="${SOURCES.asteroids}" target="_blank" rel="noopener">main belt is between Mars and Jupiter</a>. Display bounds, asteroid positions, density and comets are schematic hazards, not an asteroid dataset. Outer-planet and Pluto routes activate these hazards.</p><p>Flight distances, thrust, gravity, time and consumption are compressed separately for play. This is not an actual trajectory simulation; see <a href="${SOURCES.trajectory}" target="_blank" rel="noopener">NASA Trajectory Browser</a> for real planning. Unlocks, chassis/payload allocation and credit prices are game rules.</p><p>Discoveries are existing <a href="${SOURCES.facts}" target="_blank" rel="noopener">NASA fact-sheet</a> values unlocked by instruments. <a href="${SOURCES.science}" target="_blank" rel="noopener">Solar System Exploration</a> supports descriptions; the <a href="${SOURCES.data}" target="_blank" rel="noopener">planetary data directory</a> links real observation archives.</p>
+  <h3>Solar system</h3><p><a href="${SOURCES.orrery}" target="_blank" rel="noopener">NASA orrery</a> provides a, e, period and orientation. The solver uses M=2πt/P and ten Newton iterations for E−e sin E=M, then rotates (a(cos E−e), a√(1−e²)sin E) by omega+raan, matching your Godot example. All orbits share 24,000 world units/AU (20× the previous map) and 0.08 simulated days per second. The source has no common epoch: phase zero is illustrative, not today's positions. The 2D projection retains but does not apply inclination/tau.</p><p>Planet bodies are circular pixel sprites. Their display radius is 65 × (diameter / Earth diameter)^0.55, using NASA fact-sheet diameters. The Sun uses twice its 695,700 km mean radius from the <a href="${SOURCES.sun}" target="_blank" rel="noopener">NASA Sun Fact Sheet</a>. This separate, compressed size scale makes small planets visible and the Sun clearly largest; it does not alter the linear orbital scale. Earth distances are model vector separations. The <a href="${SOURCES.units}" target="_blank" rel="noopener">NASA AU conversion</a> supplies kilometers. Gravity acts from every planet and the Sun, with game softening and local scale factors.</p>
+  <h3>Background art</h3><p>The drifting stars, stellar explosions, supernova shell and black-hole formation are decorative pixel-art scenes, not modeled observations. Events last 12–18 seconds and fade away. Pause background stops them; reduced-motion preferences disable them.</p><h3>Engine specifications</h3><p><a href="${SOURCES.rl10}" target="_blank" rel="noopener">RL10A-3-3A · NTRS p.176</a>: 16,500 lbf vacuum thrust, 305 lb, 444.4 s Isp, 5:1 O/F, converted to N and kg. <a href="${SOURCES.j2x}" target="_blank" rel="noopener">J-2X · NTRS slide 2</a>: 1,307 kN, 2,516 kg, minimum 448 s Isp, 5.5 O/F, from 2009 development requirements. Both use LH₂/LOX. J-2X is not presented as operationally flown.</p><p>The builder keeps kg and kN. Ideal Δv = Isp g₀ ln(wet/dry) and flow = thrust/(Isp g₀), following the <a href="${SOURCES.equation}" target="_blank" rel="noopener">NASA rocket equation</a>. A fixed 740 kg orbiter chassis is a design allocation, not measured NASA hardware. The Earth-reference thrust check uses vacuum ratings as a classroom comparison. Flight begins outside Earth.</p>
+  <h3>Progression & credits</h3><p>New campaigns start at ${GAME_RULES.initialCredits} game credits, with Venus and basic parts unlocked. Wins open Mars, Mercury, Jupiter, Saturn, Uranus, Neptune, then Pluto. Cards show wins still needed. Each extra instrument adds 30% of the base grant, and base grants increase with route difficulty. Two-engine boosters, 8,000 kg fuel and thermal imaging unlock after one win; the magnetometer after two; J-2X and 20,000 kg fuel after three; four-engine boosters after four; 50,000 kg fuel after five. Prices and grants are fictional credits, not real mission costs.</p><p>Shopping is free until Buy & launch. Purchases charge once. Wins pay once; failures have no refund. Bankruptcy occurs after a flight if fewer than ${minimumMissionCost()} CR remain for the cheapest build. Only an explicit restart restores the starting balance. Existing saved credits and completed missions are preserved when upgrading to this version.</p>
+  <h3>Flight</h3><p>Fuel is shown as remaining percent. Throttle rises over 1.4 seconds; thrust uses F/m to change velocity, with no artificial top speed or drag. Coasting conserves momentum. Braking, steering, and stabilization use fuel; burn rate is accelerated 5× for game difficulty. The opposite side jet fires to rotate the nose. More boosters improve turn acceleration and rate; added mass reduces both. These steering allocations are game rules, not published NASA engine torque ratings. Empty fuel fails the mission. Scanning starts automatically in the chosen planet's cyan band; stay there for ${GAME_RULES.scanSeconds} scan seconds. No F key, hidden speed requirement or extra action is needed. Gentle stabilization helps once inside.</p><p>Hull starts at 100%. Target impacts remove 25%, solar heat 40%, asteroids 30%, comets 55%, and belt rocks 30%. A short cooldown prevents one contact from counting as many impacts. The ship is knocked back. Only zero hull ends the flight.</p><p>Other planets exert gravity but do not scan or award a mission. The <a href="${SOURCES.asteroids}" target="_blank" rel="noopener">main belt is between Mars and Jupiter</a>. The game band spans 2.1–3.5 model AU. Large deterministic rocks fill the whole band, with denser streams and more comets while crossing. These boundaries, density, rock sizes and comets are schematic challenge settings, not measured asteroid data. Real interplanetary asteroid spacing is not depicted. Outer-planet and Pluto routes activate these hazards.</p><p>Flight distances, thrust, gravity, time and consumption are compressed separately for play. This is not an actual trajectory simulation; see <a href="${SOURCES.trajectory}" target="_blank" rel="noopener">NASA Trajectory Browser</a> for real planning. Unlocks, chassis/payload allocation and credit prices are game rules.</p><p>Discoveries are existing <a href="${SOURCES.facts}" target="_blank" rel="noopener">NASA fact-sheet</a> values unlocked by instruments. <a href="${SOURCES.science}" target="_blank" rel="noopener">Solar System Exploration</a> supports descriptions; the <a href="${SOURCES.data}" target="_blank" rel="noopener">planetary data directory</a> links real observation archives.</p>
   <div class="table-scroll"><table><tr><th>World</th><th>a / AU</th><th>Period / days</th><th>e</th></tr>${Object.entries(NASA_ORRERY_DATA).map(([name,o])=>`<tr><td>${name}</td><td>${o.sma}</td><td>${o.period}</td><td>${o.eccentricity}</td></tr>`).join('')}</table></div>`);
 }
 
@@ -310,6 +418,11 @@ $('.close').onclick = closeModal;
 $('#sources-nav').onclick = $('#method-footer').onclick = notes;
 $('#archive-nav').onclick = archive; $('#wallet').onclick = ledger;
 $('#mission-nav').onclick = () => requestStage(0);
-document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => requestStage(+b.dataset.step));
+
 window.addEventListener('pagehide', () => { if (flightController) saveFlight(flightController.state); });
+window.addEventListener('scroll', positionPartInfo, { passive: true, capture: true });
+window.addEventListener('resize', positionPartInfo, { passive: true });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') hidePartInfo(); });
+document.addEventListener('pointerdown', event => { if (!event.target.closest('.part-row,.part-popover')) hidePartInfo(); });
+document.addEventListener('focusin', event => { if (!event.target.closest('.part-row,.part-popover')) hidePartInfo(); });
 saveCampaign(); render();

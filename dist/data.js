@@ -19,6 +19,7 @@ const NASA_ORRERY_DATA = {
 const SOURCES = {
   orrery: 'https://nasa.github.io/mission-viz/RMarkdown/ontology_based_orrery_generated_from_R_code.html',
   facts: 'https://nssdc.gsfc.nasa.gov/planetary/factsheet/',
+  sun: 'https://nssdc.gsfc.nasa.gov/planetary/factsheet/sunfact.html',
   units: 'https://nssdc.gsfc.nasa.gov/planetary/factsheet/fact_notes.html',
   science: 'https://science.nasa.gov/solar-system/',
   asteroids: 'https://science.nasa.gov/solar-system/asteroids/facts/',
@@ -42,6 +43,8 @@ const NASA_FACTS = {
   Neptune: { diameter: 49528, gravity: 11.0, temperature: -200, magnetic: 'Yes' },
   Pluto: { diameter: 2376, gravity: 0.6, temperature: -225, magnetic: 'Unknown' }
 };
+// NASA Sun Fact Sheet, Bulk parameters: volumetric mean radius, km.
+const NASA_SUN_RADIUS_KM = 695700;
 
 // SI definitions for kg/lb and N/lbf; AU from NASA Fact Sheet Notes.
 const UNITS = { kgPerLb: 0.45359237, newtonsPerLbf: 4.4482216152605, g0: 9.80665, kmPerAU: 149597870.7 };
@@ -58,9 +61,9 @@ const NASA_ENGINES = [
 ];
 
 const WORLDS = [
-  { name: 'Mercury', type: 'Rocky planet', color: '#a8a39d', description: 'Map a cratered surface and examine a world of extreme temperatures.', science: ['Surface imaging', 'Thermal observations'] },
   { name: 'Venus', type: 'Rocky planet', color: '#dab66f', description: 'Observe a cloud-covered world with a dense atmosphere.', science: ['Cloud observations', 'Thermal data'] },
   { name: 'Mars', type: 'Rocky planet', color: '#df8064', description: 'A rocky world. A new perspective. Investigate its terrain and environment.', science: ['Surface mapping', 'Thermal observations'] },
+  { name: 'Mercury', type: 'Rocky planet', color: '#a8a39d', description: 'Map a cratered surface and examine a world of extreme temperatures.', science: ['Surface imaging', 'Thermal observations'] },
   { name: 'Jupiter', type: 'Gas giant', color: '#d2b094', description: 'Investigate cloud systems and the environment of a giant planet.', science: ['Cloud imaging', 'Magnetic fields'] },
   { name: 'Saturn', type: 'Gas giant', color: '#d9c58d', description: 'Explore the rings and atmospheric environment of a gas giant.', science: ['Ring imaging', 'Magnetic fields'] },
   { name: 'Uranus', type: 'Ice giant', color: '#8ad2d7', description: 'Study an ice giant through atmospheric and magnetic observations.', science: ['Atmospheric imaging', 'Magnetic fields'] },
@@ -79,13 +82,19 @@ const GAME_RULES = {
   enginePrices: [180, 650], boosterCounts: [1, 2, 4],
   unlocks: { engine: [0, 3], boosters: { 1: 0, 2: 1, 4: 4 }, fuel: [0, 1, 3, 5], instruments: [0, 1, 2] },
   instruments: [{ name: 'Imaging camera', massKg: 5, cost: 80, kind: 'camera' }, { name: 'Thermal radiometer', massKg: 10, cost: 110, kind: 'thermal' }, { name: 'Magnetometer', massKg: 4, cost: 100, kind: 'magnetic' }],
-  // All heliocentric positions use ONE linear scale. Planet radii are exaggerated.
-  // Solar GM in compressed world units, derived from Earth's a and period.
-  auScale: 1200, daysPerSecond: 1, gravityScale: 12,
-  sunMu: 4 * Math.PI ** 2 * 1200 ** 3 / NASA_ORRERY_DATA.Earth.period ** 2,
-  controlAccelerationScale: 6, fuelBurnTimeScale: 2.5,
-  cruiseBoost: 5, maximumCruiseSpeed: 1800,
+  // All heliocentric positions use ONE linear scale, 20x the previous map.
+  // Solar GM is derived from Earth's a and period at the same compressed time.
+  auScale: 24000, daysPerSecond: 0.08, gravityScale: 1.2,
+  sunMu: 4 * Math.PI ** 2 * 24000 ** 3 / (NASA_ORRERY_DATA.Earth.period / 0.08) ** 2,
+  controlAccelerationScale: 1, fuelBurnTimeScale: 5,
+  throttleRiseSeconds: 1.4, throttleFallSeconds: 0.35, cruiseBoost: 1.8,
+  turnAcceleration: 1.8, turnRate: 0.9, steeringBurn: 0.045,
+  // Reward rises by route difficulty; each extra instrument adds 30% of base.
+  missionGrants: [900, 1200, 1600, 2800, 3800, 5000, 6500, 8500], scienceBonus: 0.30,
   // Belt is a schematic distribution between Mars and Jupiter, not asteroid data.
-  beltInnerAU: 2.1, beltOuterAU: 3.3,
-  planetRadii: { Mercury: 19, Venus: 25, Earth: 27, Mars: 22, Jupiter: 62, Saturn: 54, Uranus: 38, Neptune: 36, Pluto: 18 }
+  beltInnerAU: 2.1, beltOuterAU: 3.5, beltCellSize: 1400, beltRocksPerCell: 15,
+  // One monotonic display-size law for EVERY body, including the Sun.
+  // Diameter ratios are compressed with exponent .55 for visible small worlds;
+  // this is not the linear orbit-distance scale or a true-scale body diagram.
+  earthDisplayRadius: 65, bodySizeExponent: 0.55
 };

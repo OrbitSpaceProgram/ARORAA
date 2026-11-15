@@ -156,3 +156,49 @@ kbd { display: inline-block; font: 8px monospace; color: #b0c3d6; border: 1px so
   .mission-result { padding: 10px 0 20px; }.mission-result h1 { font-size: 27px; line-height: 1.25; }.mission-result > .label { font-size: 7px; letter-spacing: 1px; }.result-subtitle { font-size: 11px; max-width: 290px; }.reward-award strong { font-size: 38px; }.mission-result .discoveries { gap: 10px; }.discovery-card { min-width: 150px; max-width: 250px; padding: 19px 12px; }.discovery-card .label { font-size: 7px; }.discovery-card > strong { font-size: 23px; }.unlock-reveal { gap: 7px; }.unlock-reveal span { font-size: 8px; }.result-actions { flex-direction: column; gap: 20px; }.result-actions .primary { width: 100%; max-width: 300px; }.result-reference { font-size: 8px; }.bankruptcy-panel { padding: 33px 18px; }.bankruptcy-panel h2 { font-size: 30px; }.result-accounting { gap: 18px; }.result-accounting b { font-size: 18px; }.bankruptcy-panel .actions { flex-direction: column; }.actions { flex-wrap: wrap; }dialog { padding: 24px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none!important; transition: none!important; }.credit-token { display: none; } }
+
+/* OSP: a quiet category lab, with specifications beside the focused part. */
+#cosmic-background { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; image-rendering: pixelated; opacity: .85; }
+#cosmic-background[hidden] { display: none; }
+@media(prefers-reduced-motion:reduce) { #cosmic-background { display: none; } }
+main { position: relative; z-index: 1; }.flight-mode #cosmic-background { opacity: .3; }
+.stars { background-image: radial-gradient(ellipse at 78% 15%,#322d6233,transparent 58%); background-size: auto; }
+.brand .brand-wordmark { display: flex; flex-direction: column; font-weight: 800; font-size: 18px; letter-spacing: 3px; color: #e6eefc; line-height: 1.1; }
+.brand-wordmark small { font: 8px monospace; letter-spacing: 2px; color: #9faecc; margin-top: 5px; }
+.section-heading h2 { margin-top: 10px; font-size: 30px; }.flight-heading h2 { font-size: 23px; }
+.destination-heading h1 { margin-top: 0; }.destination-copy .primary { margin-top: 7px; }
+footer { align-items: center; }footer button:disabled { color: #60728c; cursor: default; }
+.category-lab { grid-template-columns: 168px minmax(270px,1fr) 290px; gap: 22px; align-items: start; }
+.part-categories { display: flex; flex-direction: column; gap: 7px; }
+.part-categories > button { position: relative; display: grid; grid-template-columns: 20px 1fr; gap: 7px 8px; padding: 20px 15px; text-align: left; border: 1px solid transparent; border-radius: 5px; background: #10182a99; color: #91a0ba; }
+.part-categories > button > span { font: 9px monospace; color: #617794; align-self: center; }.part-categories > button strong { font-size: 13px; font-weight: 500; }
+.part-categories > button small { grid-column: 2; font: 8px monospace; color: #7087a2; line-height: 1.5; }
+.part-categories > button.active { background: #17303b; border-color: #376471; color: #b0f0ee; }.part-categories > button.active::before { position: absolute; content: ''; width: 3px; background: #85e9e8; left: -1px; top: 18px; bottom: 18px; }
+.part-categories > button:hover { border-color: #3d536c; }.part-categories > button.active small { color: #87afb9; }
+.part-selection { min-height: 410px; border-radius: 5px; background: #101729ed; padding: 26px; }
+.part-selection-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }.part-selection-heading h3 { font-size: 17px; margin: 0; }.part-selection-heading > span { font: 7px monospace; letter-spacing: 1px; color: #7787a2; }
+.part-row { position: relative; display: flex; align-items: center; gap: 9px; margin-bottom: 13px; }.part-row .part { margin: 0; min-width: 0; padding: 23px 17px; min-height: 76px; }.part-row .part > span:first-child { font-size: 13px; }.part-row .part > span:last-child { font-size: 10px; }
+.part-info-button { border: 1px solid #40506b; border-radius: 50%; padding: 0; width: 23px; height: 23px; flex: 0 0 23px; font: italic 12px Georgia,serif; color: #91adc2; background: #142035; }.part-info-button:hover,.part-info-button[aria-expanded=true] { color: #d3ffff; border-color: #8dd5d7; }
+.part-row .part-locked { opacity: .5; }.part-row .part-locked:focus-visible { opacity: .85; }
+.part-note { font-size: 10px; color: #8496b2; line-height: 1.9; margin-top: 21px; }.science-bonus-note { font: 10px/1.8 monospace; color: #8bbcaf; border-left: 2px solid #395e5a; padding-left: 12px; margin-top: 25px; }
+.category-lab .assembly-summary { border-radius: 5px; background: #101729ed; }.category-lab .rocket-stage { height: 135px; }
+.category-lab .rocket-stage > canvas { width: 128px; height: 128px; }.category-lab .cart-total { margin-top: 17px; }
+.part-popover { position: fixed; z-index: 30; padding: 23px; border: 1px solid #547184; border-radius: 5px; box-shadow: 0 12px 45px #010511b3; background: #122234fa; backdrop-filter: blur(15px); min-height: 290px; overflow-y: auto; overscroll-behavior: contain; }
+.part-popover[hidden] { display: none; }.part-popover > .label { font-size: 7px; letter-spacing: 1px; display: block; padding-right: 15px; }.part-popover h3 { margin: 14px 0 12px; font-size: 18px; color: #def5f7; }.part-popover p { color: #adbfd2; font-size: 11px; line-height: 1.8; margin: 0 0 13px; }
+.part-popover dl { margin: 0 0 16px; }.part-popover dl > div { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px solid #2b4256; font: 9px/1.6 monospace; }.part-popover dt { color: #8aa0b8; }.part-popover dd { margin: 0; text-align: right; color: #d0e7ee; }
+.part-popover a { font: 10px monospace; }.part-popover > small { display: block; margin-top: 14px; color: #859ab1; font-size: 9px; line-height: 1.7; }
+.close-part-info { position: absolute; right: 12px; top: 10px; border: 0; background: none; color: #bed7e5; padding: 0 4px; font-size: 20px; }
+.reward-breakdown { color: #8da7bc; font: 10px/1.8 monospace; margin-top: 12px; }
+@media(max-width:1100px) {
+ .category-lab { grid-template-columns: 145px minmax(230px,1fr) 255px; gap: 15px; }.part-selection { padding: 20px; }.part-categories > button { padding: 18px 11px; }.part-row .part { padding: 21px 12px; }.part-row .part > span:first-child { font-size: 11px; }.part-selection-heading { display: block; }.part-selection-heading > span { display: block; margin-top: 10px; }
+}
+@media(max-width:900px) {
+ .category-lab { grid-template-columns: 145px minmax(0,1fr); }.category-lab .assembly-summary { grid-column: 2; position: static; }.category-lab .rocket-stage { height: 100px; }.part-selection { min-height: 330px; }
+}
+@media(max-width:660px) {
+ .brand .brand-wordmark { font-size: 15px; letter-spacing: 2px; }.brand-wordmark small { font-size: 7px; letter-spacing: 1.2px; }.brand-icon { margin-right: 4px; }
+ nav button:first-child { display: block; }.section-heading h2 { font-size: 27px; }.section-heading { gap: 12px; }.category-lab { grid-template-columns: 95px minmax(0,1fr); gap: 10px; }.part-categories { gap: 6px; }.part-categories > button { padding: 15px 9px; display: flex; flex-direction: column; gap: 5px; }.part-categories > button > span { align-self: start; font-size: 8px; }.part-categories > button strong { font-size: 10px; }.part-categories > button small { font-size: 7px; }
+ .part-selection { min-height: 342px; padding: 15px 10px; }.part-selection-heading h3 { font-size: 14px; }.part-selection-heading > span { font-size: 6px; letter-spacing: .2px; }.part-row { gap: 5px; }.part-row .part { flex-direction: column; align-items: start; justify-content: center; padding: 14px 10px; gap: 9px; min-height: 76px; }.part-row .part > span:first-child { font-size: 10px; line-height: 1.6; }.part-row .part > span:last-child { font-size: 9px; }.part-info-button { width: 20px; height: 20px; flex-basis: 20px; }.part-note { font-size: 8px; }.science-bonus-note { font-size: 8px; padding-left: 8px; }
+ .category-lab .assembly-summary { grid-column: 1/-1; margin-top: 7px; }.category-lab .rocket-stage { height: 125px; }.part-popover { padding: 22px; }.part-popover h3 { font-size: 18px; }
+ footer { gap: 15px; }footer > span { width: 100%; }.destination-copy .primary { font-size: 10px; gap: 8px; }
+}

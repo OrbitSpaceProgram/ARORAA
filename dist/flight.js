@@ -17,9 +17,9 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
   // Seeded, reproducible schematic asteroid belt. No individual asteroid claim.
   let seed = 431;
   function random() { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; }
-  const belt = Array.from({ length: 500 }, () => {
+  const belt = Array.from({ length: 2400 }, () => {
     const angle = random() * TAU, r = (GAME_RULES.beltInnerAU + random() * (GAME_RULES.beltOuterAU - GAME_RULES.beltInnerAU)) * GAME_RULES.auScale;
-    return { x: Math.cos(angle) * r, y: Math.sin(angle) * r, r: 3 + random() * 9, shade: random() };
+    return { x: Math.cos(angle) * r, y: Math.sin(angle) * r, r: 20 + random() * 45, shade: random() };
   });
   const starfield = Array.from({ length: 230 }, () => ({ x: random(), y: random(), bright: random(), depth: 0.025 + random() * 0.12 }));
 
@@ -72,39 +72,6 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     button.addEventListener('pointercancel', release, { signal });
   });
 
-  function damage(amount, hazard) {
-    if (state.damageCooldown > 0) return;
-    state.hp = Math.max(0, state.hp - amount); state.damageCooldown = 1.2; flash = 0.5;
-    const a = Math.atan2(state.y - hazard.y, state.x - hazard.x);
-    state.vx = state.vx * 0.6 + Math.cos(a) * 35;
-    state.vy = state.vy * 0.6 + Math.sin(a) * 35;
-    hazard.hit = true;
-  }
-  function advanceHazards(dt) {
-    if (!outerMission) return;
-    const capture = captureStatus(state, mission.target, state.days);
-    state.hazardClock -= dt;
-    if (state.hazardClock <= 0 && state.elapsed > 2 && capture.r > capture.band.outer * 2) {
-      const a = Math.hypot(state.vx, state.vy) > 25 ? Math.atan2(state.vy, state.vx) : state.angle;
-      const side = (random() - 0.5) * 650, ahead = 600 + random() * 300;
-      const comet = random() > 0.72 && state.elapsed > 6;
-      state.hazards.push({ x: state.x + Math.cos(a) * ahead - Math.sin(a) * side,
-        y: state.y + Math.sin(a) * ahead + Math.cos(a) * side,
-        vx: -Math.cos(a) * (comet ? 180 : 18), vy: -Math.sin(a) * (comet ? 180 : 18),
-        r: comet ? 12 : 10 + random() * 14, comet, life: 30 });
-      state.hazardClock = 0.65 + random() * 0.8;
-    }
-    for (const h of state.hazards) {
-      h.x += h.vx * dt; h.y += h.vy * dt; h.life -= dt;
-      if (!h.hit && Math.hypot(h.x - state.x, h.y - state.y) < h.r + 11) damage(h.comet ? 55 : 30, h);
-    }
-    state.hazards = state.hazards.filter(h => h.life > 0 && Math.hypot(h.x - state.x, h.y - state.y) < 4500).slice(-35);
-    const solarR = Math.hypot(state.x, state.y);
-    if (solarR >= GAME_RULES.beltInnerAU * GAME_RULES.auScale - 50 && solarR <= GAME_RULES.beltOuterAU * GAME_RULES.auScale + 50) {
-      for (const rock of belt) if (Math.abs(rock.x - state.x) < 30 && Math.hypot(rock.x - state.x, rock.y - state.y) < rock.r + 10) damage(24, rock);
-    }
-  }
-
   function drawRadar() {
     const size = radar.width, mid = size / 2;
     const rangeAU = Math.max(2.5, NASA_ORRERY_DATA[mission.target].sma * 1.3, Math.hypot(state.x, state.y) / GAME_RULES.auScale * 1.2);
@@ -129,7 +96,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.fillStyle = '#070d19'; c.fillRect(0, 0, width, height);
     const speed = Math.hypot(state.vx, state.vy);
-    const zoom = map ? Math.min(width, height) / (GAME_RULES.auScale * 105) : clamp(1 - speed / 1900, 0.5, 1);
+    const zoom = map ? Math.min(width, height) / (GAME_RULES.auScale * 105) : clamp(650 / (650 + speed), 0.14, 1);
     const cameraX = map ? 0 : state.x, cameraY = map ? 0 : state.y;
     const sx = x => width / 2 + (x - cameraX) * zoom, sy = y => height / 2 + (y - cameraY) * zoom;
     for (const star of starfield) {
@@ -142,16 +109,22 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
       c.strokeStyle = orbit.name === mission.target ? '#2d738629' : '#29465b21'; c.lineWidth = 1; c.beginPath();
       orbit.points.forEach((p, i) => i ? c.lineTo(sx(p.x), sy(p.y)) : c.moveTo(sx(p.x), sy(p.y))); c.stroke();
     }
-    for (const rock of belt) {
+    for (const rock of (map ? belt : beltRocksNear(state.x, state.y))) {
       const x = sx(rock.x), y = sy(rock.y);
       if (x < -20 || x > width + 20 || y < -20 || y > height + 20) continue;
       c.fillStyle = map ? '#92765b66' : rock.shade > 0.5 ? '#8e8776' : '#565e6f';
       const size = map ? 1 : Math.max(2, rock.r * zoom);
-      c.fillRect(x - size / 2, y - size / 2, size, size);
+      if (map) c.fillRect(x, y, 1, 1);
+      else {
+        c.beginPath(); c.moveTo(x - size, y); c.lineTo(x - size * .6, y - size * .8);
+        c.lineTo(x + size * .4, y - size); c.lineTo(x + size, y + size * .25);
+        c.lineTo(x + size * .3, y + size); c.lineTo(x - size * .7, y + size * .65); c.closePath(); c.fill();
+        c.fillStyle = '#303d50'; c.fillRect(x - size * .3, y - size * .3, size * .45, size * .3);
+      }
     }
-    const sunX = sx(0), sunY = sy(0), sunR = map ? 5 : 80 * zoom;
-    if (sunX > -450 && sunX < width + 450 && sunY > -450 && sunY < height + 450) {
-      const glow = c.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, map ? 25 : 380 * zoom);
+    const sunX = sx(0), sunY = sy(0), sunR = map ? 7 : planetRadius('Sun') * zoom;
+    if (sunX > -sunR * 2 && sunX < width + sunR * 2 && sunY > -sunR * 2 && sunY < height + sunR * 2) {
+      const glow = c.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, map ? 25 : sunR * 1.9);
       glow.addColorStop(0, '#ffba4b6b'); glow.addColorStop(0.4, '#de6b2627'); glow.addColorStop(1, '#b53a1000');
       c.fillStyle = glow; c.fillRect(0, 0, width, height);
       c.fillStyle = '#eab871'; c.beginPath(); c.arc(sunX, sunY, sunR, 0, TAU); c.fill();
@@ -159,7 +132,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     }
     for (const name of Object.keys(NASA_ORRERY_DATA)) {
       const p = orbitalPosition(name, state.days), x = sx(p.x), y = sy(p.y), r = map ? (name === mission.target ? 5 : 3) : planetRadius(name) * zoom;
-      if (x < -250 || x > width + 250 || y < -250 || y > height + 250) continue;
+      if (x < -r * 4 || x > width + r * 4 || y < -r * 4 || y > height + r * 4) continue;
       if (name === mission.target && !map) {
         const band = captureBand(name); c.fillStyle = '#43e1e309'; c.beginPath();
         c.arc(x, y, band.outer * zoom, 0, TAU); c.arc(x, y, band.inner * zoom, 0, TAU, true); c.fill();
@@ -181,7 +154,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
         c.beginPath(); c.moveTo(x - r, y); c.lineTo(x - r * 0.4, y - r); c.lineTo(x + r * 0.7, y - r * 0.6); c.lineTo(x + r, y + r * 0.4); c.lineTo(x, y + r); c.closePath(); c.fill();
         c.fillStyle = '#4a5363'; c.fillRect(x - r * 0.3, y - r * 0.2, r * 0.5, r * 0.5);
       }
-      if (state.damageCooldown <= 0 || Math.floor(state.elapsed * 12) % 2) drawRocket(c, width / 2, height / 2, state.angle, width < 600 ? 0.85 : 1, mission.parts, !paused && input.thrust);
+      if (state.damageCooldown <= 0 || Math.floor(state.elapsed * 12) % 2) drawRocket(c, width / 2, height / 2, state.angle, width < 600 ? 0.85 : 1, mission.parts, !paused && state.throttle > .04, !paused ? state.turnJet : 0);
       drawArrow(sx, sy);
     } else {
       const x = sx(state.x), y = sy(state.y); c.fillStyle = '#f3ffff'; c.beginPath(); c.arc(x, y, 4, 0, TAU); c.fill();
@@ -221,13 +194,16 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     document.querySelector('#day-readout').textContent = state.days.toFixed(1);
     const g = gravityAt(state.x, state.y, state.days);
     document.querySelector('#gravity-readout').textContent = 'GRAVITY ' + Math.hypot(g.x, g.y).toFixed(1) + ' u/s²';
-    document.querySelector('#boost-readout').textContent = input.brake ? 'BRAKING' : input.thrust ? input.boost ? 'BOOSTING' : 'THRUST' : 'COASTING';
+    document.querySelector('#boost-readout').textContent = input.brake ? 'BRAKING' : state.turnJet ? (state.turnJet > 0 ? 'LEFT JET → RIGHT TURN' : 'RIGHT JET → LEFT TURN') : state.throttle > .04 ? 'THRUST ' + Math.round(state.throttle * 100) + '%' : 'COASTING';
     const scanPercent = clamp(state.scan / GAME_RULES.scanSeconds * 100, 0, 100);
     document.querySelector('#scan-meter').style.width = scanPercent + '%';
     document.querySelector('#scan-readout').textContent = 'SCAN ' + Math.floor(scanPercent) + '%';
     document.querySelector('#scan-hud').classList.toggle('scanning', cap.stable);
     document.querySelector('#scan-label').textContent = cap.inBand ? 'SCANNING ' + mission.target.toUpperCase() : mission.target.toUpperCase() + ' ORBIT';
-    document.querySelector('#scan-guidance').textContent = cap.inBand ? 'You’re in orbit. Stay in the cyan band until the scan finishes.' : cap.r < cap.band.inner ? 'Too close! Steer away from the surface and back into the cyan band.' : cap.r < 800 ? 'Brake to slow down, then stay in the cyan orbital band. No extra key needed.' : 'Follow the arrow. Rotate, thrust and coast. Brake before you reach the planet.';
+    const acceleration = stats.thrustN / (stats.dryKg + state.fuelKg) * GAME_RULES.controlAccelerationScale;
+    const stoppingDistance = cap.speed ** 2 / (2 * acceleration);
+    const beltWarning = outerMission && inAsteroidBelt(state.x, state.y);
+    document.querySelector('#scan-guidance').textContent = cap.inBand ? 'Scanning. Stay in the cyan band until the scan finishes.' : cap.r < cap.band.inner ? 'Too close! Thrust away from the surface.' : stoppingDistance > cap.r - cap.band.middle && cap.speed > 60 ? 'Brake now — your momentum will carry you past the orbital band.' : beltWarning ? 'ASTEROID BELT · Slow down for gaps. Watch for crossing comets and save fuel for corrections.' : cap.r < cap.band.outer * 4 ? 'Brake to match the planet, then coast into the cyan orbital band.' : 'Thrust builds speed gradually. Coast to save fuel; reserve propellant for braking and steering.';
   }
 
   function tick(now) {
@@ -236,7 +212,6 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     if (!paused && !ended) {
       while (dt > 0) {
         const h = Math.min(dt, 1 / 120); dt -= h;
-        advanceHazards(h);
         const hpBefore = state.hp;
         const result = advanceFlight(state, mission, input, h);
         if (state.hp < hpBefore) flash = 0.5;

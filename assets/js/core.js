@@ -61,7 +61,7 @@ function engineering(p) {
     + p.instruments.reduce((s, i) => s + GAME_RULES.instruments[i].massKg, 0);
   const wetKg = dryKg + propellantKg;
   const thrustN = engine.thrustN * p.boosters;
-  const cost = GAME_RULES.enginePrices[p.engine] * p.boosters + GAME_RULES.chassisPrice
+  const cost = GAME_RULES.enginePrices[p.engine] * p.boosters
     + GAME_RULES.fuelPrices[p.fuel] + p.instruments.reduce((s, i) => s + GAME_RULES.instruments[i].cost, 0);
   const deltaV = engine.ispSeconds * UNITS.g0 * Math.log(wetKg / dryKg);
   return { cost, dryKg, wetKg, tankKg, propellantKg, thrustN,

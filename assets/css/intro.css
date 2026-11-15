@@ -1,0 +1,17 @@
+
+@font-face { font-family:'OSP Orbit Display'; src:url(../fonts/osp-display.ttf) format('truetype'); font-weight:400; font-style:normal; font-display:swap; }
+body.intro-mode { overflow:hidden; }
+body.intro-mode > header, body.intro-mode > main { display:none; }
+#intro-screen { position:relative; z-index:1; width:100%; height:100vh; height:100svh; min-height:360px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:clamp(80px,29vh,340px) 20px clamp(42px,13vh,150px); box-sizing:border-box; }
+#intro-screen[hidden] { display:none; }
+#intro-screen .intro-title { display:flex; align-items:center; justify-content:center; flex-wrap:nowrap; gap:.34em; margin:0; padding:0; max-width:100%; color:#dcecf8; font-family:'OSP Orbit Display',monospace; font-weight:400; font-size:clamp(17px,4.7vw,76px); letter-spacing:.035em; line-height:1.4; text-transform:uppercase; white-space:nowrap; text-shadow:0 0 30px #70cbd52b; transform-origin:center; animation:intro-title-breathe 8s ease-in-out infinite; }
+#intro-screen .intro-star { font-family:Arial,sans-serif; font-size:.67em; color:var(--cyan); text-shadow:0 0 20px #7cdce744; }
+#start-program { width:min(420px,82vw); min-height:78px; border:2px solid #34566e; border-radius:14px; background:#142c43; color:#dfedf8; font-family:'OSP Orbit Display',monospace; font-size:clamp(18px,1.8vw,25px); font-weight:400; line-height:1.4; letter-spacing:.12em; text-transform:uppercase; padding:22px 28px; box-shadow:inset 0 0 0 0 #06111c00; transition:border-color .25s ease,box-shadow .25s ease; cursor:pointer; }
+#start-program:hover { border-color:#091724; box-shadow:inset 0 0 20px 7px #06111c99; }
+#start-program:focus-visible { outline:2px solid var(--cyan); outline-offset:6px; }
+#start-program:active { background:#102338; }
+@keyframes intro-title-breathe { 0%,100% { transform:scale(.975); } 50% { transform:scale(1.035); } }
+@media(prefers-reduced-motion:reduce) { #intro-screen .intro-title { animation:none; } #start-program { transition:none; } }
+@media(max-height:480px) { #intro-screen { min-height:280px; padding-top:70px; padding-bottom:35px; } #start-program { min-height:60px; padding:16px 24px; } }
+#cosmic-background { image-rendering:auto; opacity:.94; }
+.flight-mode #cosmic-background { opacity:.3; }

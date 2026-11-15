@@ -2,13 +2,13 @@
  * on rails. Every planet position comes from orbitalPosition() in core.js. */
 function createSolarFlight(mission, initialState, onFinish, onSave) {
   const canvas = document.querySelector('#flight'), c = canvas.getContext('2d');
-  const radar = document.querySelector('#radar'), rc = radar.getContext('2d');
   const container = document.querySelector('#flight-container');
   const state = clone(initialState), stats = engineering(mission.parts);
   const input = { thrust: false, left: false, right: false, brake: false, boost: false };
   state.hazards ||= []; state.hazardClock ||= 0;
   const bindings = new AbortController(), signal = bindings.signal;
-  let paused = true, ended = false, destroyed = false, map = false;
+  let paused = true, ended = false, destroyed = false;
+  const map = false;
   let width = 1000, height = 600, dpr = 1, animation = 0, lastTime = 0, saveTimer = 0;
   let trail = [], trailTimer = 0, flash = 0;
   const outerMission = NASA_ORRERY_DATA[mission.target].sma > 3;
@@ -33,8 +33,10 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
 
   function syncPause() {
     document.querySelector('#flight-overlay').hidden = !paused;
-    document.querySelector('#pause').textContent = paused ? 'RESUME ▷' : 'PAUSE Ⅱ';
-    document.querySelector('#start-flight').firstChild.textContent = state.elapsed > 0 ? 'Resume paid mission ' : 'Take flight ';
+    document.querySelector('#pause').textContent = 'Pause Ⅱ';
+    document.querySelector('#pause').setAttribute('aria-pressed', String(paused));
+    document.querySelector('.flight-brief h2').textContent = state.elapsed > 0 ? 'Flight paused.' : 'Ready for launch?';
+    document.querySelector('#start-flight').firstChild.textContent = state.elapsed > 0 ? 'Resume mission ' : 'Take flight ';
   }
   function pause() {
     if (destroyed) return;
@@ -46,17 +48,15 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
   }
   function togglePause() { if (paused) resume(); else pause(); }
   function clearInput() { Object.keys(input).forEach(k => input[k] = false); }
-  document.querySelector('#pause').onclick = togglePause;
+  document.querySelector('#pause').onclick = pause;
   document.querySelector('#start-flight').onclick = resume;
-  document.querySelector('#map-toggle').onclick = () => map = !map;
   const keyMap = { KeyW: 'thrust', ArrowUp: 'thrust', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyS: 'brake', ArrowDown: 'brake', Space: 'brake', ShiftLeft: 'boost', ShiftRight: 'boost' };
   document.addEventListener('keydown', e => {
     if (document.querySelector('#modal').open || e.target.matches?.('input,textarea')) return;
-    if (keyMap[e.code] || ['KeyP', 'KeyM'].includes(e.code)) e.preventDefault();
+    if (keyMap[e.code] || e.code === 'KeyP') e.preventDefault();
     if (keyMap[e.code]) input[keyMap[e.code]] = true;
     if (e.repeat) return;
     if (e.code === 'KeyP') togglePause();
-    if (e.code === 'KeyM') map = !map;
   }, { signal });
   document.addEventListener('keyup', e => { if (keyMap[e.code]) input[keyMap[e.code]] = false; }, { signal });
   window.addEventListener('blur', pause, { signal });
@@ -71,26 +71,6 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
     button.addEventListener('pointerup', release, { signal });
     button.addEventListener('pointercancel', release, { signal });
   });
-
-  function drawRadar() {
-    const size = radar.width, mid = size / 2;
-    const rangeAU = Math.max(2.5, NASA_ORRERY_DATA[mission.target].sma * 1.3, Math.hypot(state.x, state.y) / GAME_RULES.auScale * 1.2);
-    const scale = (mid - 8) / (GAME_RULES.auScale * rangeAU);
-    rc.clearRect(0, 0, size, size); rc.fillStyle = '#08131de8'; rc.beginPath(); rc.arc(mid, mid, mid - 2, 0, TAU); rc.fill();
-    rc.strokeStyle = '#164451'; rc.lineWidth = 1;
-    for (const radius of [20, 40, 60, 77]) { rc.beginPath(); rc.arc(mid, mid, radius, 0, TAU); rc.stroke(); }
-    rc.beginPath(); rc.moveTo(mid, 4); rc.lineTo(mid, size - 4); rc.moveTo(4, mid); rc.lineTo(size - 4, mid); rc.stroke();
-    rc.save(); rc.beginPath(); rc.arc(mid, mid, mid - 4, 0, TAU); rc.clip();
-    for (const orbit of orbitPaths) {
-      rc.strokeStyle = orbit.name === mission.target ? '#2b7c86' : '#19313d'; rc.beginPath();
-      orbit.points.forEach((p, i) => i ? rc.lineTo(mid + p.x * scale, mid + p.y * scale) : rc.moveTo(mid + p.x * scale, mid + p.y * scale)); rc.stroke();
-      const p = orbitalPosition(orbit.name, state.days); rc.fillStyle = orbit.name === mission.target ? '#7bffff' : '#647b8b';
-      rc.fillRect(mid + p.x * scale - 1.5, mid + p.y * scale - 1.5, 3, 3);
-    }
-    rc.restore();
-    rc.fillStyle = '#f6c987'; rc.fillRect(mid - 2, mid - 2, 4, 4);
-    rc.fillStyle = '#ffffff'; rc.beginPath(); rc.arc(clamp(mid + state.x * scale, 5, size - 5), clamp(mid + state.y * scale, 5, size - 5), 2.5, 0, TAU); rc.fill();
-  }
 
   function draw() {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -165,7 +145,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
       c.textAlign = 'center'; c.fillStyle = '#95b1bd'; c.font = '12px monospace'; c.fillText('SOLAR SYSTEM OVERVIEW · M TO RETURN TO COCKPIT', width / 2, height - 100); c.textAlign = 'left';
     }
     if (flash > 0) { c.fillStyle = `rgba(235,76,105,${flash * 0.3})`; c.fillRect(0, 0, width, height); }
-    updateTelemetry(); drawRadar();
+    updateTelemetry();
   }
 
   function drawArrow(sx, sy) {
@@ -185,16 +165,13 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
   function updateTelemetry() {
     const cap = captureStatus(state, mission.target, state.days);
     const hp = clamp(state.hp / stats.hp * 100, 0, 100), fuel = clamp(state.fuelKg / stats.propellantKg * 100, 0, 100);
-    document.querySelector('#velocity-readout').textContent = Math.round(Math.hypot(state.vx, state.vy)) + ' u/s';
+    document.querySelector('#speed-readout').textContent = Math.round(Math.hypot(state.vx, state.vy) * (UNITS.kmPerAU * 1000 / GAME_RULES.auScale) / (GAME_RULES.daysPerSecond * 86400)).toLocaleString('en-US') + ' m/s';
     document.querySelector('#hull-readout').textContent = Math.round(hp) + '%';
     document.querySelector('#hull-meter').style.width = hp + '%';
     document.querySelector('#fuel-readout').textContent = Math.ceil(fuel) + '%';
     document.querySelector('#fuel-meter').style.width = fuel + '%';
     document.querySelector('#target-distance').textContent = (cap.r / GAME_RULES.auScale).toFixed(3) + ' AU';
-    document.querySelector('#day-readout').textContent = state.days.toFixed(1);
     const g = gravityAt(state.x, state.y, state.days);
-    document.querySelector('#gravity-readout').textContent = 'GRAVITY ' + Math.hypot(g.x, g.y).toFixed(1) + ' u/s²';
-    document.querySelector('#boost-readout').textContent = input.brake ? 'BRAKING' : state.turnJet ? (state.turnJet > 0 ? 'LEFT JET → RIGHT TURN' : 'RIGHT JET → LEFT TURN') : state.throttle > .04 ? 'THRUST ' + Math.round(state.throttle * 100) + '%' : 'COASTING';
     const scanPercent = clamp(state.scan / GAME_RULES.scanSeconds * 100, 0, 100);
     document.querySelector('#scan-meter').style.width = scanPercent + '%';
     document.querySelector('#scan-readout').textContent = 'SCAN ' + Math.floor(scanPercent) + '%';

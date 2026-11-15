@@ -77,7 +77,7 @@ const WORLDS = [
 // A win unlocks the next destination and additional component tiers.
 const GAME_RULES = {
   initialCredits: 1000, scanSeconds: 6,
-  chassisKg: 740, chassisPrice: 180, hullHP: 100, tankMassFraction: 0.04,
+  chassisKg: 740, chassisPrice: 0, hullHP: 100, tankMassFraction: 0.04,
   fuelLoads: [3000, 8000, 20000, 50000], fuelPrices: [180, 360, 750, 1500],
   enginePrices: [180, 650], boosterCounts: [1, 2, 4],
   unlocks: { engine: [0, 3], boosters: { 1: 0, 2: 1, 4: 4 }, fuel: [0, 1, 3, 5], instruments: [0, 1, 2] },

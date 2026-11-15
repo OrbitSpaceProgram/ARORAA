@@ -202,3 +202,24 @@ footer { align-items: center; }footer button:disabled { color: #60728c; cursor: 
  .category-lab .assembly-summary { grid-column: 1/-1; margin-top: 7px; }.category-lab .rocket-stage { height: 125px; }.part-popover { padding: 22px; }.part-popover h3 { font-size: 18px; }
  footer { gap: 15px; }footer > span { width: 100%; }.destination-copy .primary { font-size: 10px; gap: 8px; }
 }
+
+.assembly-summary .credit-summary { display:grid; gap:0; margin-top:14px; }
+.assembly-summary .credit-summary > div { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); font:11px/1.5 monospace; }
+.assembly-summary .credit-summary > div:nth-child(odd) { color:#b8d7e5; }
+.assembly-summary .credit-summary > div:nth-child(even) { color:var(--cyan); }
+.assembly-summary .credit-summary span { font:inherit; }
+.assembly-summary .credit-summary span:last-child { text-align:right; white-space:nowrap; }
+.assembly-summary .launch-requirements { margin-top:8px; }
+.assembly-summary .launch-requirements .check { padding:7px 0; font-size:10px; line-height:1.45; align-items:center; }
+.assembly-summary .launch-requirements .check > span:first-child { flex:1; min-width:0; }
+.assembly-summary .launch-requirements .check > span:last-child { text-align:right; max-width:48%; overflow-wrap:anywhere; }
+.assembly-summary .launch-stats { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:14px; padding:12px 0; border-bottom:1px solid var(--line); }
+.assembly-summary .launch-stats small { font-size:8px; margin-bottom:6px; }
+.assembly-summary .launch-stats strong { font-size:10px; white-space:nowrap; }
+.assembly-summary .primary { margin-top:14px; }
+.assembly-summary .engineering-reference > a { font-size:9px; }
+.telemetry .speed-label { margin-top:14px; gap:8px; flex-wrap:wrap; }
+.telemetry .speed-label b { white-space:nowrap; }
+.flight-brief .pause-mission-actions { display:grid; grid-template-columns:1fr; gap:12px; width:min(100%,320px); margin:22px auto 0; }
+.flight-brief .pause-mission-actions > button { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; width:100%; height:52px; min-height:52px; margin:0; padding:0 20px; font-size:12px; }
+.flight-heading-actions #pause { display:inline-block; }

@@ -17,7 +17,7 @@ function createSolarFlight(mission, initialState, onFinish, onSave) {
   // Seeded, reproducible schematic asteroid belt. No individual asteroid claim.
   let seed = 431;
   function random() { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; }
-  const belt = Array.from({ length: 2400 }, () => {
+  const belt = Array.from({ length: 1200 }, () => {
     const angle = random() * TAU, r = (GAME_RULES.beltInnerAU + random() * (GAME_RULES.beltOuterAU - GAME_RULES.beltInnerAU)) * GAME_RULES.auScale;
     return { x: Math.cos(angle) * r, y: Math.sin(angle) * r, r: 20 + random() * 45, shade: random() };
   });

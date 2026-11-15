@@ -259,21 +259,47 @@ function advanceHazards(s, mission, dt) {
     }
     s.hazardClock = inBelt ? .55 + hazardRandom(s) * .45 : 3 + hazardRandom(s) * 3;
   }
-  const previousX = s.x, previousY = s.y;
-  // Segment distance avoids tunneling through large rocks at high cruise speed.
-  function contact(h) {
-    const dx = s.vx * dt, dy = s.vy * dt, denominator = dx * dx + dy * dy;
-    const t = denominator ? clamp(((h.x - previousX) * dx + (h.y - previousY) * dy) / denominator, 0, 1) : 0;
-    return Math.hypot(h.x - previousX - dx * t, h.y - previousY - dy * t) < h.r + 11;
-  }
   for (const h of s.hazards) {
+    h.previousX = h.x; h.previousY = h.y;
     h.x += h.vx * dt; h.y += h.vy * dt; h.life -= dt;
-    if (!h.hit && contact(h)) hazardImpact(s, h, h.comet ? 55 : 30);
   }
   s.hazards = s.hazards.filter(h => h.life > 0 && Math.hypot(h.x - s.x, h.y - s.y) < 18000).slice(-100);
-  if (inBelt && s.damageCooldown <= 0) {
-    for (const rock of beltRocksNear(s.x, s.y)) if (contact(rock)) { hazardImpact(s, rock, 30); break; }
+}
+
+// Sweep the actual ship movement against each rock, including moving hazards.
+// Resolve contact even during the damage cooldown so the ship cannot pass through.
+function collideAsteroids(s, previousX, previousY) {
+  const rocks = new Set();
+  const distance = Math.hypot(s.x - previousX, s.y - previousY);
+  const steps = Math.max(1, Math.ceil(distance / GAME_RULES.beltCellSize));
+  for (let i = 0; i <= steps; i++) {
+    for (const rock of beltRocksNear(previousX + (s.x - previousX) * i / steps,
+      previousY + (s.y - previousY) * i / steps)) rocks.add(rock);
   }
+  let first = null;
+  for (const rock of [...rocks, ...(s.hazards || [])]) {
+    if (rock.hit) continue;
+    const startX = rock.previousX ?? rock.x, startY = rock.previousY ?? rock.y;
+    const ox = previousX - startX, oy = previousY - startY;
+    const dx = s.x - previousX - (rock.x - startX);
+    const dy = s.y - previousY - (rock.y - startY);
+    const radius = rock.r + 11, a = dx * dx + dy * dy;
+    const b = ox * dx + oy * dy, c = ox * ox + oy * oy - radius * radius;
+    const discriminant = b * b - a * c;
+    const t = c <= 0 ? 0 : a > 0 && discriminant >= 0 ? (-b - Math.sqrt(discriminant)) / a : Infinity;
+    if (t >= 0 && t <= 1 && (!first || t < first.t)) first = { rock, t, ox, oy, dx, dy, radius };
+  }
+  if (!first) return;
+  const { rock, t, ox, oy, dx, dy, radius } = first;
+  const length = Math.hypot(ox + dx * t, oy + dy * t);
+  const nx = length > 0.001 ? (ox + dx * t) / length : -Math.cos(s.angle);
+  const ny = length > 0.001 ? (oy + dy * t) / length : -Math.sin(s.angle);
+  s.x = rock.x + nx * (radius + 1); s.y = rock.y + ny * (radius + 1);
+  hazardImpact(s, rock, rock.comet ? 55 : 30);
+  const vx = rock.vx || 0, vy = rock.vy || 0;
+  const inward = (s.vx - vx) * nx + (s.vy - vy) * ny;
+  if (inward < 0) { s.vx -= inward * nx * 1.7; s.vy -= inward * ny * 1.7; }
+  s.scan = 0;
 }
 
 // A collision removes a fraction of the 100% hull; it does not instantly end play.
@@ -349,7 +375,9 @@ function advanceFlight(s, mission, input, dt) {
   s.vy += (ay * burnFraction + gravity.y) * dt;
   // No velocity assignment, artificial top speed, or drag. Coasting retains
   // momentum; changing direction requires torque and then another thrust burn.
+  const previousX = s.x, previousY = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
+  collideAsteroids(s, previousX, previousY);
   const capture = captureStatus(s, mission.target, s.days);
   if (capture.stable) {
     s.scan += dt;

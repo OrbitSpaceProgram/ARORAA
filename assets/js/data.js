@@ -92,7 +92,7 @@ const GAME_RULES = {
   // Reward rises by route difficulty; each extra instrument adds 30% of base.
   missionGrants: [900, 1200, 1600, 2800, 3800, 5000, 6500, 8500], scienceBonus: 0.30,
   // Belt is a schematic distribution between Mars and Jupiter, not asteroid data.
-  beltInnerAU: 2.1, beltOuterAU: 3.5, beltCellSize: 1400, beltRocksPerCell: 15,
+  beltInnerAU: 2.45, beltOuterAU: 3.15, beltCellSize: 1400, beltRocksPerCell: 15,
   // One monotonic display-size law for EVERY body, including the Sun.
   // Diameter ratios are compressed with exponent .55 for visible small worlds;
   // this is not the linear orbit-distance scale or a true-scale body diagram.

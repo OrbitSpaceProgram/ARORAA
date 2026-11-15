@@ -4,12 +4,12 @@ Open **dist/index.html** in a modern browser. No installation, account, internet
 
 ## Quick judge walkthrough
 
-1. **Choose Venus.** Browse the animated circular planet cards with arrows, keyboard, dots, or a swipe. Locked cards show the number of **additional** successful missions needed.
+1. **Choose Venus.** Browse the animated circular planet cards with arrows, keyboard, dots, or a swipe. Locked cards show the number of **additional** successful missions needed. The briefing below the carousel presents the existing NASA orbital and planetary reference values and separates them from simplified gameplay.
 2. **Build your rocket.** The left category panel starts on **Engines**. Switch to Boosters, Fuel tanks, or Instruments to see only those parts. Hover or focus a part to read its specifications to the left; tap **i** for details on a phone. NASA references are linked in each information panel. Escape or × closes it.
 3. The basic rocket costs **620 CR** from **1,000 CR** starting credits. **Buy & launch** charges once; **Take flight** starts the paused mission.
 4. Rotate with **A/D or Left/Right**, thrust with **W/Up**, brake with **Space/S**, and boost with **Shift + thrust**. Touch controls are below the play window. Left jets turn right; right jets turn left. Better booster assemblies increase turning performance. Thrust ramps up, velocity builds, and coasting preserves momentum.
 5. Follow the target arrow. Burn, coast, and brake early; save fuel for arrival. **Remain in the cyan orbital band for six scan seconds.** No F key is needed. Only your chosen destination can complete the mission.
-6. The victory screen shows instrument-specific science and the grant. Credit tokens fly into the persistent wallet. **Explore Mars** continues to the next destination.
+6. The victory screen shows instrument-specific NASA reference facts, an orbit recap, and the grant. These are reference values shown by the game, not measurements returned by the simulated flight. Credit tokens fly into the persistent wallet. **Explore Mars** continues to the next destination.
 
 The first expedition can take about a minute with a controlled approach; the outer missions are substantially longer and harder. **P** pauses, **M** shows the solar-system map, and **Expand** enters fullscreen on desktop. Reloading resumes the paid spacecraft paused, without buying it again. Controls and piloting guidance stay below the game window.
 
@@ -62,6 +62,8 @@ The belt's density, precise boundaries, obstacle sizes, and encounter rates are 
 ## NASA data and scale
 
 **dist/data.js begins with NASA_ORRERY_DATA**, retaining the exact nine rows of the supplied [NASA ontology-based orrery](https://nasa.github.io/mission-viz/RMarkdown/ontology_based_orrery_generated_from_R_code.html), including unused inclination and tau fields. Comments cite the source; game allocations are clearly separated in **GAME_RULES**.
+
+The destination briefing and post-flight science recap display existing values from **NASA_ORRERY_DATA** and **NASA_FACTS**, with links to their existing NASA sources. They do not add or modify scientific data. The game continues to label its compressed travel, visual scale, and flight behavior as simplified mechanics.
 
 The JavaScript solver follows the supplied Godot example: **M = 2πt/P**, ten Newton iterations for **E − e sin E = M**, then rotate **(a(cos E−e), a√(1−e²)sin E)** by **omega + raan**. All orbital positions use **one linear scale of 24,000 world units/AU**, 20× the previous map, and **0.08 simulated days per real second**. No planet is moved independently to make a level. Earth distances use the separation between model vectors and the [NASA AU conversion](https://nssdc.gsfc.nasa.gov/planetary/factsheet/fact_notes.html).
 
